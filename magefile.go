@@ -197,30 +197,6 @@ func Dev() error {
 	return nil
 }
 
-// Test runs tests for all packages
-func Test() error {
-	fmt.Println("Running tests...")
-	return sh.RunV("go", "test", "-v", "./...")
-}
-
-// TestCoverage runs tests with coverage report
-func TestCoverage() error {
-	fmt.Println("Running tests with coverage...")
-
-	coverageFile := "coverage.out"
-	if err := sh.RunV("go", "test", "-coverprofile="+coverageFile, "./..."); err != nil {
-		return fmt.Errorf("failed to run tests with coverage: %w", err)
-	}
-
-	fmt.Println("Generating coverage report...")
-	if err := sh.RunV("go", "tool", "cover", "-html="+coverageFile, "-o", "coverage.html"); err != nil {
-		return fmt.Errorf("failed to generate coverage report: %w", err)
-	}
-
-	fmt.Println("Coverage report generated: coverage.html")
-	return nil
-}
-
 // Fmt formats and tidies code using goimports and standard tooling
 func Fmt() error {
 	fmt.Println("Formatting and tidying...")
@@ -299,14 +275,6 @@ func Clean() error {
 		return fmt.Errorf("failed to remove tmp directory: %w", err)
 	}
 
-	// Remove coverage files
-	coverageFiles := []string{"coverage.out", "coverage.html"}
-	for _, file := range coverageFiles {
-		if err := sh.Rm(file); err != nil && !os.IsNotExist(err) {
-			fmt.Printf("Warning: failed to remove %s: %v\n", file, err)
-		}
-	}
-
 	fmt.Println("Clean complete!")
 	return nil
 }
@@ -372,7 +340,7 @@ func Setup() error {
 // CI runs the complete CI pipeline
 func CI() error {
 	fmt.Println("Running complete CI pipeline...")
-	mg.SerialDeps(Fmt, Vet, Lint, Build, Test, showBuildInfo)
+	mg.SerialDeps(Fmt, Vet, Lint, Build, showBuildInfo)
 	return nil
 }
 
@@ -455,10 +423,6 @@ Development:
   mage info             Show bot information
   mage status           Show development environment status
 
-Testing:
-  mage test (t)         Run all tests
-  mage testCoverage     Run tests with coverage report
-
 Quality:
   mage fmt (f)          Format code with goimports and tidy modules
   mage vet (v)          Run go vet static analysis
@@ -467,7 +431,7 @@ Quality:
   mage quality (q)      Run all quality checks (vet + lint + vulncheck)
 
 Production:
-  mage ci               Complete CI pipeline (fmt + quality + build + test)
+  mage ci               Complete CI pipeline (fmt + quality + build)
   mage clean (c)        Clean build artifacts and temporary files
   mage reset            Reset repository to fresh state (clean + tidy + download)
 
@@ -533,6 +497,5 @@ var Aliases = map[string]interface{}{
 	"c":  Clean,
 	"s":  Setup,
 	"q":  Quality,
-	"t":  Test,
 	"h":  Help,
 }

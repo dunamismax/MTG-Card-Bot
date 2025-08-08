@@ -59,7 +59,6 @@ mage setup         # Install dev tools
 mage dev           # Run bot with auto-restart
 mage build         # Build binary
 mage fmt / lint    # Format & lint checks
-mage test          # Run tests
 mage vulncheck     # Security check
 ```
 
