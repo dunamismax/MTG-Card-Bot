@@ -2,14 +2,16 @@ package main
 
 import (
 	"context"
-	"log"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
+	"github.com/dunamismax/MTG-Card-Bot/pkg/cache"
 	"github.com/dunamismax/MTG-Card-Bot/pkg/config"
 	"github.com/dunamismax/MTG-Card-Bot/pkg/discord"
+	"github.com/dunamismax/MTG-Card-Bot/pkg/logging"
+	"github.com/dunamismax/MTG-Card-Bot/pkg/metrics"
 	"github.com/dunamismax/MTG-Card-Bot/pkg/scryfall"
 )
 
@@ -17,75 +19,82 @@ func main() {
 	// Load configuration
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatalf("Failed to load configuration: %v", err)
+		logging.Error("Failed to load configuration", "error", err)
+		os.Exit(1)
 	}
 
 	// Validate configuration
 	if err := cfg.Validate(); err != nil {
-		log.Fatalf("Invalid configuration: %v", err)
+		logging.Error("Invalid configuration", "error", err)
+		os.Exit(1)
 	}
 
-	log.Printf("Starting MTG Card Bot...")
-	log.Printf("Bot Name: %s", cfg.BotName)
-	log.Printf("Command Prefix: %s", cfg.CommandPrefix)
-	log.Printf("Log Level: %s", cfg.LogLevel)
-	log.Printf("Shutdown Timeout: %v", cfg.ShutdownTimeout)
+	// Initialize logging
+	logging.InitializeLogger(cfg.LogLevel, cfg.JSONLogging)
+
+	// Initialize metrics
+	metrics.Initialize()
+
+	// Log startup information
+	logging.LogStartup(cfg.BotName, cfg.CommandPrefix, cfg.LogLevel, cfg.DebugMode)
 	if cfg.DebugMode {
-		log.Println("Debug mode enabled")
+		logging.Debug("Debug mode enabled")
 	}
+
+	// Create cache
+	cardCache := cache.NewCardCache(cfg.CacheTTL, cfg.CacheSize)
+	logging.Info("Card cache initialized", "ttl", cfg.CacheTTL, "max_size", cfg.CacheSize)
 
 	// Create Scryfall client
 	scryfallClient := scryfall.NewClient()
-	log.Println("Scryfall client initialized")
+	logging.Info("Scryfall client initialized")
 
 	// Create Discord bot
-	bot, err := discord.NewBot(cfg, scryfallClient)
+	bot, err := discord.NewBot(cfg, scryfallClient, cardCache)
 	if err != nil {
-		log.Fatalf("Failed to create Discord bot: %v", err)
+		logging.Error("Failed to create Discord bot", "error", err)
+		os.Exit(1)
 	}
 
 	// Start the bot
 	if err := bot.Start(); err != nil {
-		log.Fatalf("Failed to start Discord bot: %v", err)
+		logging.Error("Failed to start Discord bot", "error", err)
+		os.Exit(1)
 	}
 
 	// Print usage instructions
 	printUsageInstructions(cfg.CommandPrefix)
 
 	// Setup graceful shutdown
-	gracefulShutdown(bot, scryfallClient, cfg.ShutdownTimeout)
+	gracefulShutdown(bot, scryfallClient, cardCache, cfg.ShutdownTimeout)
 }
 
 func printUsageInstructions(prefix string) {
-	log.Println("")
-	log.Println("=== MTG Card Bot Usage ===")
-	log.Printf("%s<card-name> - Look up a Magic: The Gathering card by name", prefix)
-	log.Printf("Example: %sthe-one-ring", prefix)
-	log.Printf("Example: %sLightning Bolt", prefix)
-	log.Printf("%srandom - Get a random Magic card", prefix)
-	log.Println("")
-	log.Println("The bot supports fuzzy matching, so partial names work!")
-	log.Println("Examples of valid searches:")
-	log.Printf("- %sjac bele (finds Jace Beleren)", prefix)
-	log.Printf("- %sbol (finds Lightning Bolt)", prefix)
-	log.Printf("- %sforce of will", prefix)
-	log.Println("===========================")
-	log.Println("")
+	logger := logging.WithComponent("usage")
+	logger.Info("=== MTG Card Bot Usage ===")
+	logger.Info("Card lookup", "example", prefix+"<card-name>")
+	logger.Info("Examples", "the_one_ring", prefix+"the-one-ring", "lightning_bolt", prefix+"Lightning Bolt")
+	logger.Info("Random card", "command", prefix+"random")
+	logger.Info("Help", "command", prefix+"help")
+	logger.Info("Statistics", "command", prefix+"stats")
+	logger.Info("Fuzzy matching supported")
+	logger.Info("Fuzzy examples", "jac_bele", prefix+"jac bele", "bol", prefix+"bol", "force_will", prefix+"force of will")
+	logger.Info("===========================")
 }
 
 // gracefulShutdown handles graceful shutdown with timeout
-func gracefulShutdown(bot *discord.Bot, scryfallClient *scryfall.Client, timeout time.Duration) {
+func gracefulShutdown(bot *discord.Bot, scryfallClient *scryfall.Client, cardCache *cache.CardCache, timeout time.Duration) {
 	// Create a channel to receive OS signals
 	sigChan := make(chan os.Signal, 1)
 
 	// Register the channel to receive specific signals
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
 
-	log.Println("Bot is running. Press Ctrl+C to stop.")
+	logging.Info("Bot is running. Press Ctrl+C to stop.")
 
 	// Wait for a signal
 	sig := <-sigChan
-	log.Printf("Received signal: %v. Initiating graceful shutdown...", sig)
+	logging.Info("Received signal, initiating graceful shutdown", "signal", sig.String())
 
 	// Create a context with timeout for shutdown
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
@@ -98,28 +107,32 @@ func gracefulShutdown(bot *discord.Bot, scryfallClient *scryfall.Client, timeout
 	go func() {
 		defer func() { done <- true }()
 
-		log.Println("Closing Scryfall client...")
+		logging.Info("Closing Scryfall client...")
 		scryfallClient.Close()
 
-		log.Println("Stopping Discord bot...")
+		logging.Info("Stopping Discord bot...")
 		if err := bot.Stop(); err != nil {
-			log.Printf("Error stopping Discord bot: %v", err)
+			logging.Error("Error stopping Discord bot", "error", err)
 		} else {
-			log.Println("Discord bot stopped successfully")
+			logging.Info("Discord bot stopped successfully")
 		}
 
-		log.Println("Cleanup completed")
+		// Log final metrics
+		metricsSummary := metrics.Get().GetSummary()
+		logging.Info("Final metrics", "commands_total", metricsSummary.CommandsTotal, "cache_hit_rate", metricsSummary.CacheHitRate)
+
+		logging.Info("Cleanup completed")
 	}()
 
 	// Wait for shutdown to complete or timeout
 	select {
 	case <-done:
-		log.Println("Graceful shutdown completed")
+		logging.Info("Graceful shutdown completed")
 	case <-ctx.Done():
-		log.Printf("Shutdown timeout exceeded (%v), forcing exit", timeout)
+		logging.Warn("Shutdown timeout exceeded, forcing exit", "timeout", timeout)
 	}
 
 	// Give a moment for final log messages to be written
 	time.Sleep(100 * time.Millisecond)
-	log.Println("Bot shutdown complete")
+	logging.LogShutdown()
 }

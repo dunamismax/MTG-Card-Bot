@@ -2,11 +2,15 @@ package discord
 
 import (
 	"fmt"
-	"log"
 	"strings"
+	"time"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/dunamismax/MTG-Card-Bot/pkg/cache"
 	"github.com/dunamismax/MTG-Card-Bot/pkg/config"
+	"github.com/dunamismax/MTG-Card-Bot/pkg/errors"
+	"github.com/dunamismax/MTG-Card-Bot/pkg/logging"
+	"github.com/dunamismax/MTG-Card-Bot/pkg/metrics"
 	"github.com/dunamismax/MTG-Card-Bot/pkg/scryfall"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
@@ -16,22 +20,24 @@ type Bot struct {
 	session         *discordgo.Session
 	config          *config.Config
 	scryfallClient  *scryfall.Client
+	cache           *cache.CardCache
 	commandHandlers map[string]CommandHandler
 }
 
 type CommandHandler func(s *discordgo.Session, m *discordgo.MessageCreate, args []string) error
 
 // NewBot creates a new Discord bot instance
-func NewBot(cfg *config.Config, scryfallClient *scryfall.Client) (*Bot, error) {
+func NewBot(cfg *config.Config, scryfallClient *scryfall.Client, cardCache *cache.CardCache) (*Bot, error) {
 	session, err := discordgo.New("Bot " + cfg.DiscordToken)
 	if err != nil {
-		return nil, fmt.Errorf("creating Discord session: %w", err)
+		return nil, errors.NewDiscordError("failed to create Discord session", err)
 	}
 
 	bot := &Bot{
 		session:         session,
 		config:          cfg,
 		scryfallClient:  scryfallClient,
+		cache:           cardCache,
 		commandHandlers: make(map[string]CommandHandler),
 	}
 
@@ -49,26 +55,31 @@ func NewBot(cfg *config.Config, scryfallClient *scryfall.Client) (*Bot, error) {
 
 // Start starts the Discord bot
 func (b *Bot) Start() error {
-	log.Printf("Starting %s bot...", b.config.BotName)
+	logger := logging.WithComponent("discord")
+	logger.Info("Starting bot", "bot_name", b.config.BotName)
 
 	err := b.session.Open()
 	if err != nil {
-		return fmt.Errorf("opening Discord session: %w", err)
+		return errors.NewDiscordError("failed to open Discord session", err)
 	}
 
-	log.Printf("Bot is now running as %s", b.session.State.User.Username)
+	logger.Info("Bot is now running", "username", b.session.State.User.Username)
 	return nil
 }
 
 // Stop stops the Discord bot
 func (b *Bot) Stop() error {
-	log.Printf("Stopping %s bot...", b.config.BotName)
+	logger := logging.WithComponent("discord")
+	logger.Info("Stopping bot", "bot_name", b.config.BotName)
 	return b.session.Close()
 }
 
 // registerCommands registers all command handlers
 func (b *Bot) registerCommands() {
 	b.commandHandlers["random"] = b.handleRandomCard
+	b.commandHandlers["help"] = b.handleHelp
+	b.commandHandlers["stats"] = b.handleStats
+	b.commandHandlers["cache"] = b.handleCacheStats
 	// Card lookup is handled differently since it uses dynamic card names
 }
 
@@ -97,8 +108,18 @@ func (b *Bot) messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 	// Handle specific commands
 	if handler, exists := b.commandHandlers[command]; exists {
 		if err := handler(s, m, args); err != nil {
-			log.Printf("Error handling command '%s': %v", command, err)
+			logger := logging.WithComponent("discord").With(
+				"user_id", m.Author.ID,
+				"username", m.Author.Username,
+				"command", command,
+			)
+			logging.LogError(logger, err, "Command execution failed")
+			metrics.RecordCommand(false)
+			metrics.RecordError(err)
 			b.sendErrorMessage(s, m.ChannelID, "Sorry, something went wrong processing your command.")
+		} else {
+			metrics.RecordCommand(true)
+			logging.LogDiscordCommand(m.Author.ID, m.Author.Username, command, true)
 		}
 		return
 	}
@@ -106,35 +127,69 @@ func (b *Bot) messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 	// If no specific handler, treat it as a card lookup
 	cardName := strings.Join(parts, " ")
 	if err := b.handleCardLookup(s, m, cardName); err != nil {
-		log.Printf("Error looking up card '%s': %v", cardName, err)
-		b.sendErrorMessage(s, m.ChannelID, fmt.Sprintf("Sorry, I couldn't find a card named '%s'.", cardName))
+		logger := logging.WithComponent("discord").With(
+			"user_id", m.Author.ID,
+			"username", m.Author.Username,
+			"card_name", cardName,
+		)
+		logging.LogError(logger, err, "Card lookup failed")
+		metrics.RecordCommand(false)
+		metrics.RecordError(err)
+
+		// Provide different error messages based on error type
+		if errors.IsErrorType(err, errors.ErrorTypeNotFound) {
+			b.sendErrorMessage(s, m.ChannelID, fmt.Sprintf("Sorry, I couldn't find a card named '%s'. Try using different keywords or check the spelling.", cardName))
+		} else {
+			b.sendErrorMessage(s, m.ChannelID, "Sorry, something went wrong while searching for that card.")
+		}
+	} else {
+		metrics.RecordCommand(true)
+		logging.LogDiscordCommand(m.Author.ID, m.Author.Username, "card_lookup", true)
 	}
 }
 
 // handleRandomCard handles the !random command
 func (b *Bot) handleRandomCard(s *discordgo.Session, m *discordgo.MessageCreate, args []string) error {
-	log.Printf("Fetching random card for user %s", m.Author.Username)
+	logger := logging.WithComponent("discord").With(
+		"user_id", m.Author.ID,
+		"username", m.Author.Username,
+		"command", "random",
+	)
+	logger.Info("Fetching random card")
 
 	card, err := b.scryfallClient.GetRandomCard()
 	if err != nil {
-		return fmt.Errorf("fetching random card: %w", err)
+		return errors.NewAPIError("failed to fetch random card", err)
 	}
 
 	return b.sendCardMessage(s, m.ChannelID, card)
 }
 
-// handleCardLookup handles card name lookup
+// handleCardLookup handles card name lookup with caching
 func (b *Bot) handleCardLookup(s *discordgo.Session, m *discordgo.MessageCreate, cardName string) error {
 	if cardName == "" {
-		return fmt.Errorf("card name cannot be empty")
+		return errors.NewValidationError("card name cannot be empty")
 	}
 
-	log.Printf("Looking up card '%s' for user %s", cardName, m.Author.Username)
+	logger := logging.WithComponent("discord").With(
+		"user_id", m.Author.ID,
+		"username", m.Author.Username,
+		"card_name", cardName,
+	)
+	logger.Info("Looking up card")
 
-	card, err := b.scryfallClient.GetCardByName(cardName)
+	// Try to get from cache first, then fetch from API if not found
+	card, err := b.cache.GetOrSet(cardName, func(name string) (*scryfall.Card, error) {
+		return b.scryfallClient.GetCardByName(name)
+	})
+
 	if err != nil {
-		return fmt.Errorf("fetching card by name: %w", err)
+		return errors.NewAPIError("failed to fetch card", err)
 	}
+
+	// Update cache metrics
+	cacheStats := b.cache.Stats()
+	metrics.Get().UpdateCacheStats(cacheStats.Hits, cacheStats.Misses, int64(cacheStats.Size))
 
 	return b.sendCardMessage(s, m.ChannelID, card)
 }
@@ -142,7 +197,7 @@ func (b *Bot) handleCardLookup(s *discordgo.Session, m *discordgo.MessageCreate,
 // sendCardMessage sends a card image and details to a Discord channel
 func (b *Bot) sendCardMessage(s *discordgo.Session, channelID string, card *scryfall.Card) error {
 	if !card.IsValidCard() {
-		return fmt.Errorf("invalid card data")
+		return errors.NewValidationError("received invalid card data from API")
 	}
 
 	if !card.HasImage() {
@@ -175,13 +230,16 @@ func (b *Bot) sendCardMessage(s *discordgo.Session, channelID string, card *scry
 		}
 
 		_, err := s.ChannelMessageSendEmbed(channelID, embed)
-		return err
+		if err != nil {
+			return errors.NewDiscordError("failed to send text-only card embed", err)
+		}
+		return nil
 	}
 
 	// Get the highest quality image URL
 	imageURL := card.GetBestImageURL()
 	if imageURL == "" {
-		return fmt.Errorf("no image available for card")
+		return errors.NewValidationError("no image available for card")
 	}
 
 	// Create rich embed with card image
@@ -208,7 +266,10 @@ func (b *Bot) sendCardMessage(s *discordgo.Session, channelID string, card *scry
 	}
 
 	_, err := s.ChannelMessageSendEmbed(channelID, embed)
-	return err
+	if err != nil {
+		return errors.NewDiscordError("failed to send card embed with image", err)
+	}
+	return nil
 }
 
 // sendErrorMessage sends an error message to a Discord channel
@@ -220,7 +281,8 @@ func (b *Bot) sendErrorMessage(s *discordgo.Session, channelID, message string) 
 	}
 
 	if _, err := s.ChannelMessageSendEmbed(channelID, embed); err != nil {
-		log.Printf("Failed to send error message: %v", err)
+		logger := logging.WithComponent("discord")
+		logger.Error("Failed to send error message", "error", err)
 	}
 }
 
@@ -242,4 +304,203 @@ func (b *Bot) getRarityColor(rarity string) int {
 	default:
 		return 0x9B59B6 // Default purple
 	}
+}
+
+// handleHelp handles the !help command
+func (b *Bot) handleHelp(s *discordgo.Session, m *discordgo.MessageCreate, args []string) error {
+	logger := logging.WithComponent("discord").With(
+		"user_id", m.Author.ID,
+		"username", m.Author.Username,
+		"command", "help",
+	)
+	logger.Info("Showing help information")
+
+	embed := &discordgo.MessageEmbed{
+		Title:       "MTG Card Bot Help",
+		Description: "I can help you look up Magic: The Gathering cards!",
+		Color:       0x3498DB, // Blue color
+		Fields: []*discordgo.MessageEmbedField{
+			{
+				Name:   fmt.Sprintf("%s<card-name>", b.config.CommandPrefix),
+				Value:  "Look up a card by name (supports fuzzy matching)",
+				Inline: false,
+			},
+			{
+				Name:   fmt.Sprintf("%srandom", b.config.CommandPrefix),
+				Value:  "Get a random Magic: The Gathering card",
+				Inline: false,
+			},
+			{
+				Name:   fmt.Sprintf("%shelp", b.config.CommandPrefix),
+				Value:  "Show this help message",
+				Inline: false,
+			},
+			{
+				Name:   fmt.Sprintf("%sstats", b.config.CommandPrefix),
+				Value:  "Show bot performance statistics",
+				Inline: false,
+			},
+			{
+				Name: "Examples",
+				Value: fmt.Sprintf("`%slightning bolt` • `%sthe-one-ring` • `%sjac bele` • `%srandom`",
+					b.config.CommandPrefix, b.config.CommandPrefix, b.config.CommandPrefix, b.config.CommandPrefix),
+				Inline: false,
+			},
+		},
+		Footer: &discordgo.MessageEmbedFooter{
+			Text: "💡 Tip: Fuzzy matching works! Try partial names like 'jac bele' for 'Jace Beleren'",
+		},
+	}
+
+	_, err := s.ChannelMessageSendEmbed(m.ChannelID, embed)
+	if err != nil {
+		return errors.NewDiscordError("failed to send help message", err)
+	}
+	return nil
+}
+
+// handleStats handles the !stats command
+func (b *Bot) handleStats(s *discordgo.Session, m *discordgo.MessageCreate, args []string) error {
+	logger := logging.WithComponent("discord").With(
+		"user_id", m.Author.ID,
+		"username", m.Author.Username,
+		"command", "stats",
+	)
+	logger.Info("Showing bot statistics")
+
+	summary := metrics.Get().GetSummary()
+	uptime := time.Duration(summary.UptimeSeconds * float64(time.Second))
+
+	// Format uptime nicely
+	uptimeStr := formatDuration(uptime)
+
+	embed := &discordgo.MessageEmbed{
+		Title: "Bot Statistics",
+		Color: 0x2ECC71, // Green color
+		Fields: []*discordgo.MessageEmbedField{
+			{
+				Name: "📊 Commands",
+				Value: fmt.Sprintf("Total: %d\nSuccessful: %d\nFailed: %d\nSuccess Rate: %.1f%%",
+					summary.CommandsTotal, summary.CommandsSuccessful, summary.CommandsFailed, summary.CommandSuccessRate),
+				Inline: true,
+			},
+			{
+				Name: "🌐 API Requests",
+				Value: fmt.Sprintf("Total: %d\nSuccess Rate: %.1f%%\nAvg Response: %.0fms",
+					summary.APIRequestsTotal, summary.APISuccessRate, summary.AverageResponseTime),
+				Inline: true,
+			},
+			{
+				Name: "💾 Cache Performance",
+				Value: fmt.Sprintf("Size: %d cards\nHit Rate: %.1f%%\nHits: %d\nMisses: %d",
+					summary.CacheSize, summary.CacheHitRate, summary.CacheHits, summary.CacheMisses),
+				Inline: true,
+			},
+			{
+				Name: "⚡ Performance",
+				Value: fmt.Sprintf("Commands/sec: %.2f\nAPI Requests/sec: %.2f",
+					summary.CommandsPerSecond, summary.APIRequestsPerSecond),
+				Inline: true,
+			},
+			{
+				Name:   "⏱️ Uptime",
+				Value:  uptimeStr,
+				Inline: true,
+			},
+			{
+				Name:   "🚀 Started",
+				Value:  fmt.Sprintf("<t:%d:R>", time.Now().Add(-uptime).Unix()),
+				Inline: true,
+			},
+		},
+		Footer: &discordgo.MessageEmbedFooter{
+			Text: "Statistics since bot startup",
+		},
+	}
+
+	// Add error information if there are errors
+	if len(summary.ErrorsByType) > 0 {
+		errorInfo := make([]string, 0, len(summary.ErrorsByType))
+		for errorType, count := range summary.ErrorsByType {
+			if count > 0 {
+				errorInfo = append(errorInfo, fmt.Sprintf("%s: %d", string(errorType), count))
+			}
+		}
+		if len(errorInfo) > 0 {
+			embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{
+				Name:   "⚠️ Errors",
+				Value:  strings.Join(errorInfo, "\n"),
+				Inline: false,
+			})
+		}
+	}
+
+	_, err := s.ChannelMessageSendEmbed(m.ChannelID, embed)
+	if err != nil {
+		return errors.NewDiscordError("failed to send stats message", err)
+	}
+	return nil
+}
+
+// handleCacheStats handles the !cache command (detailed cache stats)
+func (b *Bot) handleCacheStats(s *discordgo.Session, m *discordgo.MessageCreate, args []string) error {
+	logger := logging.WithComponent("discord").With(
+		"user_id", m.Author.ID,
+		"username", m.Author.Username,
+		"command", "cache",
+	)
+	logger.Info("Showing cache statistics")
+
+	cacheStats := b.cache.Stats()
+
+	embed := &discordgo.MessageEmbed{
+		Title: "Cache Statistics",
+		Color: 0xE67E22, // Orange color
+		Fields: []*discordgo.MessageEmbedField{
+			{
+				Name: "📦 Storage",
+				Value: fmt.Sprintf("Size: %d / %d cards\nUtilization: %.1f%%",
+					cacheStats.Size, cacheStats.MaxSize, float64(cacheStats.Size)/float64(cacheStats.MaxSize)*100),
+				Inline: true,
+			},
+			{
+				Name: "🎯 Performance",
+				Value: fmt.Sprintf("Hit Rate: %.1f%%\nHits: %d\nMisses: %d",
+					cacheStats.HitRate, cacheStats.Hits, cacheStats.Misses),
+				Inline: true,
+			},
+			{
+				Name: "♻️ Management",
+				Value: fmt.Sprintf("Evictions: %d\nTTL: %v",
+					cacheStats.Evictions, cacheStats.TTL),
+				Inline: true,
+			},
+		},
+		Footer: &discordgo.MessageEmbedFooter{
+			Text: "Cache helps reduce API calls and improve response times",
+		},
+	}
+
+	_, err := s.ChannelMessageSendEmbed(m.ChannelID, embed)
+	if err != nil {
+		return errors.NewDiscordError("failed to send cache stats message", err)
+	}
+	return nil
+}
+
+// formatDuration formats a duration into a human-readable string
+func formatDuration(d time.Duration) string {
+	days := int(d.Hours()) / 24
+	hours := int(d.Hours()) % 24
+	minutes := int(d.Minutes()) % 60
+	seconds := int(d.Seconds()) % 60
+
+	if days > 0 {
+		return fmt.Sprintf("%dd %dh %dm %ds", days, hours, minutes, seconds)
+	} else if hours > 0 {
+		return fmt.Sprintf("%dh %dm %ds", hours, minutes, seconds)
+	} else if minutes > 0 {
+		return fmt.Sprintf("%dm %ds", minutes, seconds)
+	}
+	return fmt.Sprintf("%ds", seconds)
 }

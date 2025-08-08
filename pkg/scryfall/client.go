@@ -7,6 +7,10 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/dunamismax/MTG-Card-Bot/pkg/errors"
+	"github.com/dunamismax/MTG-Card-Bot/pkg/logging"
+	"github.com/dunamismax/MTG-Card-Bot/pkg/metrics"
 )
 
 const (
@@ -86,6 +90,18 @@ func (e ErrorResponse) Error() string {
 	return fmt.Sprintf("scryfall api error: %s (status: %d)", e.Details, e.Status)
 }
 
+// GetErrorType returns the error type for metrics tracking
+func (e ErrorResponse) GetErrorType() errors.ErrorType {
+	switch e.Status {
+	case 404:
+		return errors.ErrorTypeNotFound
+	case 429:
+		return errors.ErrorTypeRateLimit
+	default:
+		return errors.ErrorTypeAPI
+	}
+}
+
 func NewClient() *Client {
 	return &Client{
 		httpClient: &http.Client{
@@ -96,140 +112,168 @@ func NewClient() *Client {
 }
 
 func (c *Client) request(endpoint string) (*http.Response, error) {
+	start := time.Now()
+	logger := logging.WithComponent("scryfall")
+
 	// Rate limiting
 	<-c.rateLimiter.C
 
 	req, err := http.NewRequest("GET", BaseURL+endpoint, nil)
 	if err != nil {
-		return nil, fmt.Errorf("creating request: %w", err)
+		metrics.RecordAPIRequest(false, time.Since(start).Milliseconds())
+		return nil, errors.NewNetworkError("failed to create HTTP request", err)
 	}
 
 	req.Header.Set("User-Agent", UserAgent)
 	req.Header.Set("Accept", "application/json")
 
+	logger.Debug("Making API request", "endpoint", endpoint)
+
 	resp, err := c.httpClient.Do(req)
+	responseTime := time.Since(start).Milliseconds()
+
 	if err != nil {
-		return nil, fmt.Errorf("making request: %w", err)
+		metrics.RecordAPIRequest(false, responseTime)
+		logging.LogError(logger, errors.NewNetworkError("HTTP request failed", err), "API request failed")
+		return nil, errors.NewNetworkError("failed to execute HTTP request", err)
 	}
+
+	logging.LogAPIRequest(endpoint, responseTime)
 
 	if resp.StatusCode >= 400 {
 		defer func() {
 			if closeErr := resp.Body.Close(); closeErr != nil {
-				// Log error but don't fail the function
-				fmt.Printf("Warning: failed to close response body: %v\n", closeErr)
+				logger.Warn("Failed to close response body", "error", closeErr)
 			}
 		}()
 		var errResp ErrorResponse
 		if err := json.NewDecoder(resp.Body).Decode(&errResp); err != nil {
-			return nil, fmt.Errorf("http error %d", resp.StatusCode)
+			metrics.RecordAPIRequest(false, responseTime)
+			return nil, errors.FromHTTPStatus(resp.StatusCode, fmt.Sprintf("HTTP error %d", resp.StatusCode))
 		}
+		metrics.RecordAPIRequest(false, responseTime)
+		// Create MTGError for proper metrics tracking
+		mtgErr := errors.FromHTTPStatus(errResp.Status, errResp.Details)
+		metrics.RecordError(mtgErr)
 		return nil, errResp
 	}
 
+	metrics.RecordAPIRequest(true, responseTime)
 	return resp, nil
 }
 
 // GetCardByName searches for a card by name using fuzzy matching
 func (c *Client) GetCardByName(name string) (*Card, error) {
+	logger := logging.WithComponent("scryfall").With("card_name", name)
+
 	if name == "" {
-		return nil, fmt.Errorf("card name cannot be empty")
+		return nil, errors.NewValidationError("card name cannot be empty")
 	}
 
 	endpoint := fmt.Sprintf("/cards/named?fuzzy=%s", url.QueryEscape(name))
 
 	resp, err := c.request(endpoint)
 	if err != nil {
-		return nil, fmt.Errorf("requesting card by name: %w", err)
+		logging.LogError(logger, err, "Failed to request card by name")
+		return nil, errors.NewAPIError("failed to fetch card by name", err)
 	}
 	defer func() {
 		if closeErr := resp.Body.Close(); closeErr != nil {
-			// Log error but don't fail the function
-			fmt.Printf("Warning: failed to close response body: %v\n", closeErr)
+			logger.Warn("Failed to close response body", "error", closeErr)
 		}
 	}()
 
 	var card Card
 	if err := json.NewDecoder(resp.Body).Decode(&card); err != nil {
-		return nil, fmt.Errorf("decoding card response: %w", err)
+		return nil, errors.NewAPIError("failed to decode card response", err)
 	}
 
+	logger.Debug("Successfully retrieved card", "card_name", card.Name)
 	return &card, nil
 }
 
 // GetCardByExactName searches for a card by exact name match
 func (c *Client) GetCardByExactName(name string) (*Card, error) {
+	logger := logging.WithComponent("scryfall").With("card_name", name)
+
 	if name == "" {
-		return nil, fmt.Errorf("card name cannot be empty")
+		return nil, errors.NewValidationError("card name cannot be empty")
 	}
 
 	endpoint := fmt.Sprintf("/cards/named?exact=%s", url.QueryEscape(name))
 
 	resp, err := c.request(endpoint)
 	if err != nil {
-		return nil, fmt.Errorf("requesting card by exact name: %w", err)
+		logging.LogError(logger, err, "Failed to request card by exact name")
+		return nil, errors.NewAPIError("failed to fetch card by exact name", err)
 	}
 	defer func() {
 		if closeErr := resp.Body.Close(); closeErr != nil {
-			// Log error but don't fail the function
-			fmt.Printf("Warning: failed to close response body: %v\n", closeErr)
+			logger.Warn("Failed to close response body", "error", closeErr)
 		}
 	}()
 
 	var card Card
 	if err := json.NewDecoder(resp.Body).Decode(&card); err != nil {
-		return nil, fmt.Errorf("decoding card response: %w", err)
+		return nil, errors.NewAPIError("failed to decode card response", err)
 	}
 
+	logger.Debug("Successfully retrieved card by exact name", "card_name", card.Name)
 	return &card, nil
 }
 
 // GetRandomCard returns a random Magic card
 func (c *Client) GetRandomCard() (*Card, error) {
+	logger := logging.WithComponent("scryfall")
 	endpoint := "/cards/random"
 
 	resp, err := c.request(endpoint)
 	if err != nil {
-		return nil, fmt.Errorf("requesting random card: %w", err)
+		logging.LogError(logger, err, "Failed to request random card")
+		return nil, errors.NewAPIError("failed to fetch random card", err)
 	}
 	defer func() {
 		if closeErr := resp.Body.Close(); closeErr != nil {
-			// Log error but don't fail the function
-			fmt.Printf("Warning: failed to close response body: %v\n", closeErr)
+			logger.Warn("Failed to close response body", "error", closeErr)
 		}
 	}()
 
 	var card Card
 	if err := json.NewDecoder(resp.Body).Decode(&card); err != nil {
-		return nil, fmt.Errorf("decoding random card response: %w", err)
+		return nil, errors.NewAPIError("failed to decode random card response", err)
 	}
 
+	logger.Debug("Successfully retrieved random card", "card_name", card.Name)
 	return &card, nil
 }
 
 // SearchCards performs a full-text search for cards
 func (c *Client) SearchCards(query string) (*SearchResult, error) {
+	logger := logging.WithComponent("scryfall")
+
 	if query == "" {
-		return nil, fmt.Errorf("search query cannot be empty")
+		return nil, errors.NewValidationError("search query cannot be empty")
 	}
 
 	endpoint := fmt.Sprintf("/cards/search?q=%s", url.QueryEscape(query))
 
 	resp, err := c.request(endpoint)
 	if err != nil {
-		return nil, fmt.Errorf("searching cards: %w", err)
+		logging.LogError(logger, err, "Failed to search cards")
+		return nil, errors.NewAPIError("failed to search cards", err)
 	}
 	defer func() {
 		if closeErr := resp.Body.Close(); closeErr != nil {
-			// Log error but don't fail the function
-			fmt.Printf("Warning: failed to close response body: %v\n", closeErr)
+			logger.Warn("Failed to close response body", "error", closeErr)
 		}
 	}()
 
 	var result SearchResult
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("decoding search response: %w", err)
+		return nil, errors.NewAPIError("failed to decode search response", err)
 	}
 
+	logger.Debug("Successfully searched cards", "query", query, "results", result.TotalCards)
 	return &result, nil
 }
 

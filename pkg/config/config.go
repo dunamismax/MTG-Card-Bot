@@ -13,11 +13,14 @@ type Config struct {
 	DiscordToken    string
 	CommandPrefix   string
 	LogLevel        string
+	JSONLogging     bool
 	BotName         string
 	ShutdownTimeout time.Duration
 	RequestTimeout  time.Duration
 	MaxRetries      int
 	DebugMode       bool
+	CacheTTL        time.Duration
+	CacheSize       int
 }
 
 // Load loads configuration from environment variables
@@ -25,11 +28,14 @@ func Load() (*Config, error) {
 	cfg := &Config{
 		CommandPrefix:   "!",    // default prefix
 		LogLevel:        "info", // default log level
+		JSONLogging:     false,  // default to text logging
 		BotName:         getEnv("BOT_NAME", "mtg-card-bot"),
 		ShutdownTimeout: 30 * time.Second, // default shutdown timeout
 		RequestTimeout:  30 * time.Second, // default request timeout
 		MaxRetries:      3,                // default max retries
 		DebugMode:       false,            // default debug mode
+		CacheTTL:        15 * time.Minute, // default cache TTL
+		CacheSize:       500,              // default cache size
 	}
 
 	// Discord token is required
@@ -70,6 +76,20 @@ func Load() (*Config, error) {
 	// Parse debug mode
 	cfg.DebugMode = GetBool("DEBUG", cfg.DebugMode)
 
+	// Parse JSON logging
+	cfg.JSONLogging = GetBool("JSON_LOGGING", cfg.JSONLogging)
+
+	// Parse cache configuration
+	if ttl := os.Getenv("CACHE_TTL"); ttl != "" {
+		if parsed, err := time.ParseDuration(ttl); err == nil {
+			cfg.CacheTTL = parsed
+		} else {
+			log.Printf("Warning: invalid CACHE_TTL format '%s', using default", ttl)
+		}
+	}
+
+	cfg.CacheSize = GetInt("CACHE_SIZE", cfg.CacheSize)
+
 	return cfg, nil
 }
 
@@ -98,6 +118,14 @@ func (c *Config) Validate() error {
 
 	if c.MaxRetries < 0 {
 		return fmt.Errorf("max retries cannot be negative")
+	}
+
+	if c.CacheTTL <= 0 {
+		return fmt.Errorf("cache TTL must be positive")
+	}
+
+	if c.CacheSize <= 0 {
+		return fmt.Errorf("cache size must be positive")
 	}
 
 	return nil
