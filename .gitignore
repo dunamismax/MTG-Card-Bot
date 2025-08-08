@@ -28,5 +28,15 @@ go.work.sum
 .env
 
 # Editor/IDE
-# .idea/
-# .vscode/
+.idea/
+.vscode/
+
+# Bot binaries
+/bin/
+
+# Local environment files
+.env.local
+
+# Logs
+*.log
+logs/
