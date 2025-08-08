@@ -5,9 +5,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dunamismax/MTG-Card-Bot/pkg/errors"
-	"github.com/dunamismax/MTG-Card-Bot/pkg/logging"
-	"github.com/dunamismax/MTG-Card-Bot/pkg/scryfall"
+	"github.com/dunamismax/MTG-Card-Bot/errors"
+	"github.com/dunamismax/MTG-Card-Bot/logging"
+	"github.com/dunamismax/MTG-Card-Bot/scryfall"
 )
 
 // CacheEntry represents a cached item with expiration

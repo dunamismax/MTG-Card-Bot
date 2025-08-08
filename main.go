@@ -7,12 +7,12 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/dunamismax/MTG-Card-Bot/pkg/cache"
-	"github.com/dunamismax/MTG-Card-Bot/pkg/config"
-	"github.com/dunamismax/MTG-Card-Bot/pkg/discord"
-	"github.com/dunamismax/MTG-Card-Bot/pkg/logging"
-	"github.com/dunamismax/MTG-Card-Bot/pkg/metrics"
-	"github.com/dunamismax/MTG-Card-Bot/pkg/scryfall"
+	"github.com/dunamismax/MTG-Card-Bot/cache"
+	"github.com/dunamismax/MTG-Card-Bot/config"
+	"github.com/dunamismax/MTG-Card-Bot/discord"
+	"github.com/dunamismax/MTG-Card-Bot/logging"
+	"github.com/dunamismax/MTG-Card-Bot/metrics"
+	"github.com/dunamismax/MTG-Card-Bot/scryfall"
 )
 
 func main() {

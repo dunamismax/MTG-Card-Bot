@@ -97,7 +97,7 @@ func buildBot(bot string) error {
 		binaryPath += ".exe"
 	}
 
-	return sh.Run("go", "build", "-ldflags="+ldflags, "-o", binaryPath, fmt.Sprintf("./bots/%s/main.go", bot))
+	return sh.Run("go", "build", "-ldflags="+ldflags, "-o", binaryPath, "main.go")
 }
 
 func getCurrentTime() string {
@@ -145,21 +145,19 @@ func Run() error {
 		return fmt.Errorf("failed to load .env file: %w", err)
 	}
 
-	botDir := filepath.Join("bots", botName)
-	if _, err := os.Stat(botDir); os.IsNotExist(err) {
-		return fmt.Errorf("bot %s does not exist", botName)
+	if _, err := os.Stat("main.go"); os.IsNotExist(err) {
+		return fmt.Errorf("main.go does not exist")
 	}
 
 	fmt.Printf("Starting %s Discord bot...\n", botName)
-	return sh.RunWith(map[string]string{"BOT_NAME": botName}, "go", "run", fmt.Sprintf("./bots/%s/main.go", botName))
+	return sh.RunWith(map[string]string{"BOT_NAME": botName}, "go", "run", "main.go")
 }
 
 // Dev runs the MTG Card Bot in development mode with auto-restart
 func Dev() error {
-	// Check if bot exists
-	botDir := filepath.Join("bots", botName)
-	if _, err := os.Stat(botDir); os.IsNotExist(err) {
-		return fmt.Errorf("bot %s does not exist", botName)
+	// Check if main.go exists
+	if _, err := os.Stat("main.go"); os.IsNotExist(err) {
+		return fmt.Errorf("main.go does not exist")
 	}
 
 	fmt.Printf("Starting %s in development mode with auto-restart...\n", botName)
@@ -176,7 +174,7 @@ func Dev() error {
 			fmt.Printf("Warning: failed to load .env file: %v\n", err)
 		}
 
-		cmd := exec.Command("go", "run", fmt.Sprintf("./bots/%s/main.go", botName))
+		cmd := exec.Command("go", "run", "main.go")
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		cmd.Env = append(os.Environ(), fmt.Sprintf("BOT_NAME=%s", botName))
@@ -395,15 +393,14 @@ func Info() error {
 	fmt.Println("MTG Card Discord Bot")
 	fmt.Println("===================")
 
-	botDir := filepath.Join("bots", botName)
-	if _, err := os.Stat(botDir); os.IsNotExist(err) {
-		fmt.Printf("Bot directory not found: %s\n", botDir)
+	if _, err := os.Stat("main.go"); os.IsNotExist(err) {
+		fmt.Printf("Main file not found: main.go\n")
 		return nil
 	}
 
 	fmt.Printf("Bot name: %s\n", botName)
-	fmt.Printf("Bot directory: %s\n", botDir)
-	fmt.Printf("Main file: %s\n", filepath.Join(botDir, "main.go"))
+	fmt.Printf("Project root: %s\n", ".")
+	fmt.Printf("Main file: %s\n", "main.go")
 
 	return nil
 }
@@ -428,12 +425,11 @@ func Status() error {
 		fmt.Println("  Run: cp .env.example .env")
 	}
 
-	// Check bot directory
-	botDir := filepath.Join("bots", botName)
-	if _, err := os.Stat(botDir); err == nil {
-		fmt.Printf("Bot: %s found ✓\n", botName)
+	// Check main file
+	if _, err := os.Stat("main.go"); err == nil {
+		fmt.Printf("Bot: %s main.go found ✓\n", botName)
 	} else {
-		fmt.Printf("Bot: %s directory missing ✗\n", botName)
+		fmt.Printf("Bot: %s main.go missing ✗\n", botName)
 	}
 
 	// Check if binaries exist

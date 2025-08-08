@@ -6,12 +6,12 @@ import (
 	"time"
 
 	"github.com/bwmarrin/discordgo"
-	"github.com/dunamismax/MTG-Card-Bot/pkg/cache"
-	"github.com/dunamismax/MTG-Card-Bot/pkg/config"
-	"github.com/dunamismax/MTG-Card-Bot/pkg/errors"
-	"github.com/dunamismax/MTG-Card-Bot/pkg/logging"
-	"github.com/dunamismax/MTG-Card-Bot/pkg/metrics"
-	"github.com/dunamismax/MTG-Card-Bot/pkg/scryfall"
+	"github.com/dunamismax/MTG-Card-Bot/cache"
+	"github.com/dunamismax/MTG-Card-Bot/config"
+	"github.com/dunamismax/MTG-Card-Bot/errors"
+	"github.com/dunamismax/MTG-Card-Bot/logging"
+	"github.com/dunamismax/MTG-Card-Bot/metrics"
+	"github.com/dunamismax/MTG-Card-Bot/scryfall"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 )

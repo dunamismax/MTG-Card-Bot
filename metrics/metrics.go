@@ -2,10 +2,9 @@ package metrics
 
 import (
 	"sync"
-	"sync/atomic"
 	"time"
 
-	"github.com/dunamismax/MTG-Card-Bot/pkg/errors"
+	"github.com/dunamismax/MTG-Card-Bot/errors"
 )
 
 // Metrics holds all application metrics
@@ -129,13 +128,15 @@ func Get() *Metrics {
 // IncrementCommands increments command counters
 func (m *Metrics) IncrementCommands(successful bool) {
 	now := time.Now()
-	atomic.AddInt64(&m.CommandsTotal, 1)
 
+	m.mutex.Lock()
+	m.CommandsTotal++
 	if successful {
-		atomic.AddInt64(&m.CommandsSuccessful, 1)
+		m.CommandsSuccessful++
 	} else {
-		atomic.AddInt64(&m.CommandsFailed, 1)
+		m.CommandsFailed++
 	}
+	m.mutex.Unlock()
 
 	m.commandWindow.Add(now)
 	m.CommandsPerSecond = m.commandWindow.Rate()
@@ -144,17 +145,17 @@ func (m *Metrics) IncrementCommands(successful bool) {
 // IncrementAPIRequests increments API request counters
 func (m *Metrics) IncrementAPIRequests(successful bool, responseTimeMs int64) {
 	now := time.Now()
-	atomic.AddInt64(&m.APIRequestsTotal, 1)
 
+	m.mutex.Lock()
+	m.APIRequestsTotal++
 	if successful {
-		atomic.AddInt64(&m.APIRequestsSuccessful, 1)
+		m.APIRequestsSuccessful++
 	} else {
-		atomic.AddInt64(&m.APIRequestsFailed, 1)
+		m.APIRequestsFailed++
 	}
-
-	// Track response time
-	atomic.AddInt64(&m.APIResponseTimeSum, responseTimeMs)
-	atomic.AddInt64(&m.APIResponseCount, 1)
+	m.APIResponseTimeSum += responseTimeMs
+	m.APIResponseCount++
+	m.mutex.Unlock()
 
 	m.apiWindow.Add(now)
 	m.APIRequestsPerSecond = m.apiWindow.Rate()
@@ -169,15 +170,19 @@ func (m *Metrics) IncrementError(errorType errors.ErrorType) {
 
 // UpdateCacheStats updates cache-related metrics
 func (m *Metrics) UpdateCacheStats(hits, misses, size int64) {
-	atomic.StoreInt64(&m.CacheHits, hits)
-	atomic.StoreInt64(&m.CacheMisses, misses)
-	atomic.StoreInt64(&m.CacheSize, size)
+	m.mutex.Lock()
+	m.CacheHits = hits
+	m.CacheMisses = misses
+	m.CacheSize = size
+	m.mutex.Unlock()
 }
 
 // GetAverageResponseTime calculates the average API response time
 func (m *Metrics) GetAverageResponseTime() float64 {
-	responseTimeSum := atomic.LoadInt64(&m.APIResponseTimeSum)
-	responseCount := atomic.LoadInt64(&m.APIResponseCount)
+	m.mutex.RLock()
+	responseTimeSum := m.APIResponseTimeSum
+	responseCount := m.APIResponseCount
+	m.mutex.RUnlock()
 
 	if responseCount == 0 {
 		return 0.0
@@ -193,32 +198,40 @@ func (m *Metrics) GetUptime() time.Duration {
 
 // GetSuccessRate calculates the command success rate as a percentage
 func (m *Metrics) GetSuccessRate() float64 {
-	total := atomic.LoadInt64(&m.CommandsTotal)
+	m.mutex.RLock()
+	total := m.CommandsTotal
+	successful := m.CommandsSuccessful
+	m.mutex.RUnlock()
+
 	if total == 0 {
 		return 0.0
 	}
 
-	successful := atomic.LoadInt64(&m.CommandsSuccessful)
 	return (float64(successful) / float64(total)) * 100.0
 }
 
 // GetAPISuccessRate calculates the API success rate as a percentage
 func (m *Metrics) GetAPISuccessRate() float64 {
-	total := atomic.LoadInt64(&m.APIRequestsTotal)
+	m.mutex.RLock()
+	total := m.APIRequestsTotal
+	successful := m.APIRequestsSuccessful
+	m.mutex.RUnlock()
+
 	if total == 0 {
 		return 0.0
 	}
 
-	successful := atomic.LoadInt64(&m.APIRequestsSuccessful)
 	return (float64(successful) / float64(total)) * 100.0
 }
 
 // GetCacheHitRate calculates the cache hit rate as a percentage
 func (m *Metrics) GetCacheHitRate() float64 {
-	hits := atomic.LoadInt64(&m.CacheHits)
-	misses := atomic.LoadInt64(&m.CacheMisses)
-	total := hits + misses
+	m.mutex.RLock()
+	hits := m.CacheHits
+	misses := m.CacheMisses
+	m.mutex.RUnlock()
 
+	total := hits + misses
 	if total == 0 {
 		return 0.0
 	}
@@ -266,26 +279,47 @@ func (m *Metrics) GetSummary() Summary {
 	}
 	m.mutex.RUnlock()
 
-	return Summary{
-		CommandsTotal:         atomic.LoadInt64(&m.CommandsTotal),
-		CommandsSuccessful:    atomic.LoadInt64(&m.CommandsSuccessful),
-		CommandsFailed:        atomic.LoadInt64(&m.CommandsFailed),
+	m.mutex.RLock()
+	summary := Summary{
+		CommandsTotal:         m.CommandsTotal,
+		CommandsSuccessful:    m.CommandsSuccessful,
+		CommandsFailed:        m.CommandsFailed,
 		CommandsPerSecond:     m.CommandsPerSecond,
-		CommandSuccessRate:    m.GetSuccessRate(),
-		APIRequestsTotal:      atomic.LoadInt64(&m.APIRequestsTotal),
-		APIRequestsSuccessful: atomic.LoadInt64(&m.APIRequestsSuccessful),
-		APIRequestsFailed:     atomic.LoadInt64(&m.APIRequestsFailed),
+		APIRequestsTotal:      m.APIRequestsTotal,
+		APIRequestsSuccessful: m.APIRequestsSuccessful,
+		APIRequestsFailed:     m.APIRequestsFailed,
 		APIRequestsPerSecond:  m.APIRequestsPerSecond,
-		APISuccessRate:        m.GetAPISuccessRate(),
-		AverageResponseTime:   m.GetAverageResponseTime(),
-		CacheHits:             atomic.LoadInt64(&m.CacheHits),
-		CacheMisses:           atomic.LoadInt64(&m.CacheMisses),
-		CacheSize:             atomic.LoadInt64(&m.CacheSize),
-		CacheHitRate:          m.GetCacheHitRate(),
-		ErrorsByType:          errorsByType,
+		CacheHits:             m.CacheHits,
+		CacheMisses:           m.CacheMisses,
+		CacheSize:             m.CacheSize,
 		UptimeSeconds:         m.GetUptime().Seconds(),
 		BotStartTime:          m.BotStartTime.Format(time.RFC3339),
+		ErrorsByType:          errorsByType,
 	}
+	commandSuccessRate := float64(0)
+	if summary.CommandsTotal > 0 {
+		commandSuccessRate = (float64(summary.CommandsSuccessful) / float64(summary.CommandsTotal)) * 100.0
+	}
+	apiSuccessRate := float64(0)
+	if summary.APIRequestsTotal > 0 {
+		apiSuccessRate = (float64(summary.APIRequestsSuccessful) / float64(summary.APIRequestsTotal)) * 100.0
+	}
+	averageResponseTime := float64(0)
+	if m.APIResponseCount > 0 {
+		averageResponseTime = float64(m.APIResponseTimeSum) / float64(m.APIResponseCount)
+	}
+	cacheHitRate := float64(0)
+	total := summary.CacheHits + summary.CacheMisses
+	if total > 0 {
+		cacheHitRate = (float64(summary.CacheHits) / float64(total)) * 100.0
+	}
+	m.mutex.RUnlock()
+
+	summary.CommandSuccessRate = commandSuccessRate
+	summary.APISuccessRate = apiSuccessRate
+	summary.AverageResponseTime = averageResponseTime
+	summary.CacheHitRate = cacheHitRate
+	return summary
 }
 
 // RecordCommand is a convenience function to record command execution

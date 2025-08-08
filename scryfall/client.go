@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dunamismax/MTG-Card-Bot/pkg/errors"
-	"github.com/dunamismax/MTG-Card-Bot/pkg/logging"
-	"github.com/dunamismax/MTG-Card-Bot/pkg/metrics"
+	"github.com/dunamismax/MTG-Card-Bot/errors"
+	"github.com/dunamismax/MTG-Card-Bot/logging"
+	"github.com/dunamismax/MTG-Card-Bot/metrics"
 )
 
 const (

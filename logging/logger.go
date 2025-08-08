@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/dunamismax/MTG-Card-Bot/pkg/errors"
+	"github.com/dunamismax/MTG-Card-Bot/errors"
 )
 
 var DefaultLogger *slog.Logger

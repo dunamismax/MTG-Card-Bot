@@ -114,11 +114,16 @@ mage vulncheck     # Security check
 
 ## Development
 
-The bot uses a clean architecture with shared packages:
+The bot uses a clean architecture with organized packages:
 
-* `bots/mtg-card-bot/` - Main bot application
-* `pkg/discord/` - Discord client and helpers
-* `pkg/scryfall/` - Scryfall API integration
+* `main.go` - Application entry point
+* `discord/` - Discord client and bot logic
+* `scryfall/` - Scryfall API integration
+* `cache/` - Card caching system
+* `metrics/` - Performance monitoring
+* `logging/` - Structured logging
+* `errors/` - Custom error types
+* `config/` - Configuration management
 
 Start development with `mage dev` for auto-restart functionality.
 
