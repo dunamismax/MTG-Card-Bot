@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/magefile/mage/mg"
@@ -163,6 +165,10 @@ func Dev() error {
 	fmt.Printf("Starting %s in development mode with auto-restart...\n", botName)
 	fmt.Println("Press Ctrl+C to stop.")
 
+	// Setup signal handling for the dev mode itself
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+
 	restartCount := 0
 	for {
 		// Load environment variables fresh each restart
@@ -179,13 +185,46 @@ func Dev() error {
 			fmt.Printf("[Restart #%d] Starting %s...\n", restartCount, botName)
 		}
 
-		if err := cmd.Run(); err != nil {
-			restartCount++
-			fmt.Printf("Bot crashed: %v. Restarting in 3 seconds... (restart #%d)\n", err, restartCount)
-			time.Sleep(3 * time.Second)
-		} else {
-			fmt.Printf("Bot %s exited cleanly.\n", botName)
-			break
+		// Start the command
+		if err := cmd.Start(); err != nil {
+			return fmt.Errorf("failed to start bot: %w", err)
+		}
+
+		// Wait for either the process to finish or a signal
+		done := make(chan error, 1)
+		go func() {
+			done <- cmd.Wait()
+		}()
+
+		select {
+		case sig := <-sigChan:
+			fmt.Printf("\nReceived signal: %v. Stopping development mode...\n", sig)
+			// Forward signal to the bot process
+			if err := cmd.Process.Signal(sig); err != nil {
+				fmt.Printf("Warning: failed to send signal to bot process: %v\n", err)
+			}
+			// Wait for the process to finish gracefully
+			<-done
+			fmt.Println("Development mode stopped.")
+			return nil
+
+		case err := <-done:
+			if err != nil {
+				// Check if it was interrupted (graceful shutdown)
+				if exitError, ok := err.(*exec.ExitError); ok {
+					if exitError.ExitCode() == 1 {
+						// Exit code 1 could be graceful shutdown, check if it was a signal
+						fmt.Printf("Bot %s exited with code 1 (likely graceful shutdown).\n", botName)
+						return nil
+					}
+				}
+				restartCount++
+				fmt.Printf("Bot crashed: %v. Restarting in 3 seconds... (restart #%d)\n", err, restartCount)
+				time.Sleep(3 * time.Second)
+			} else {
+				fmt.Printf("Bot %s exited cleanly.\n", botName)
+				return nil
+			}
 		}
 
 		// Prevent infinite restart loop
