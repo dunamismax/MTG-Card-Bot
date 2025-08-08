@@ -449,7 +449,3 @@ This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) 
 </p>
 
 ---
-
-"Discord bots built with Go offer exceptional performance, reliability, and deployment simplicity. This monorepo architecture provides a solid foundation for scaling from simple utility bots to complex multi-bot ecosystems." - Me
-
----
