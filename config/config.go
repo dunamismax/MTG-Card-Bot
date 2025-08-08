@@ -1,3 +1,4 @@
+// Package config handles application configuration loading from environment variables.
 package config
 
 import (
@@ -9,6 +10,7 @@ import (
 	"time"
 )
 
+// Config holds the application configuration settings.
 type Config struct {
 	DiscordToken    string
 	CommandPrefix   string
@@ -23,28 +25,28 @@ type Config struct {
 	CacheSize       int
 }
 
-// Load loads configuration from environment variables
+// Load loads configuration from environment variables.
 func Load() (*Config, error) {
 	cfg := &Config{
-		CommandPrefix:   "!",    // default prefix
-		LogLevel:        "info", // default log level
-		JSONLogging:     false,  // default to text logging
+		CommandPrefix:   "!",    // default prefix.
+		LogLevel:        "info", // default log level.
+		JSONLogging:     false,  // default to text logging.
 		BotName:         getEnv("BOT_NAME", "mtg-card-bot"),
-		ShutdownTimeout: 30 * time.Second, // default shutdown timeout
-		RequestTimeout:  30 * time.Second, // default request timeout
-		MaxRetries:      3,                // default max retries
-		DebugMode:       false,            // default debug mode
-		CacheTTL:        15 * time.Minute, // default cache TTL
-		CacheSize:       500,              // default cache size
+		ShutdownTimeout: 30 * time.Second, // default shutdown timeout.
+		RequestTimeout:  30 * time.Second, // default request timeout.
+		MaxRetries:      3,                // default max retries.
+		DebugMode:       false,            // default debug mode.
+		CacheTTL:        15 * time.Minute, // default cache TTL.
+		CacheSize:       500,              // default cache size.
 	}
 
-	// Discord token is required
+	// Discord token is required.
 	cfg.DiscordToken = os.Getenv("DISCORD_TOKEN")
 	if cfg.DiscordToken == "" {
 		return nil, fmt.Errorf("DISCORD_TOKEN environment variable is required")
 	}
 
-	// Optional configurations
+	// Optional configurations.
 	if prefix := os.Getenv("COMMAND_PREFIX"); prefix != "" {
 		cfg.CommandPrefix = prefix
 	}
@@ -53,7 +55,7 @@ func Load() (*Config, error) {
 		cfg.LogLevel = strings.ToLower(logLevel)
 	}
 
-	// Parse timeout configurations
+	// Parse timeout configurations.
 	if timeout := os.Getenv("SHUTDOWN_TIMEOUT"); timeout != "" {
 		if parsed, err := time.ParseDuration(timeout); err == nil {
 			cfg.ShutdownTimeout = parsed
@@ -70,16 +72,16 @@ func Load() (*Config, error) {
 		}
 	}
 
-	// Parse retry configuration
+	// Parse retry configuration.
 	cfg.MaxRetries = GetInt("MAX_RETRIES", cfg.MaxRetries)
 
-	// Parse debug mode
+	// Parse debug mode.
 	cfg.DebugMode = GetBool("DEBUG", cfg.DebugMode)
 
-	// Parse JSON logging
+	// Parse JSON logging.
 	cfg.JSONLogging = GetBool("JSON_LOGGING", cfg.JSONLogging)
 
-	// Parse cache configuration
+	// Parse cache configuration.
 	if ttl := os.Getenv("CACHE_TTL"); ttl != "" {
 		if parsed, err := time.ParseDuration(ttl); err == nil {
 			cfg.CacheTTL = parsed
@@ -93,7 +95,7 @@ func Load() (*Config, error) {
 	return cfg, nil
 }
 
-// Validate validates the configuration
+// Validate validates the configuration.
 func (c *Config) Validate() error {
 	if c.DiscordToken == "" {
 		return fmt.Errorf("discord token is required")
@@ -131,7 +133,7 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-// GetBool returns a boolean environment variable with a default value
+// GetBool returns a boolean environment variable with a default value.
 func GetBool(key string, defaultValue bool) bool {
 	value := os.Getenv(key)
 	if value == "" {
@@ -146,7 +148,7 @@ func GetBool(key string, defaultValue bool) bool {
 	return boolVal
 }
 
-// GetInt returns an integer environment variable with a default value
+// GetInt returns an integer environment variable with a default value.
 func GetInt(key string, defaultValue int) int {
 	value := os.Getenv(key)
 	if value == "" {
@@ -161,20 +163,22 @@ func GetInt(key string, defaultValue int) int {
 	return intVal
 }
 
-// getEnv returns an environment variable with a default value
+// getEnv returns an environment variable with a default value.
 func getEnv(key, defaultValue string) string {
 	if value := os.Getenv(key); value != "" {
 		return value
 	}
+
 	return defaultValue
 }
 
-// contains checks if a slice contains a string
+// contains checks if a slice contains a string.
 func contains(slice []string, item string) bool {
 	for _, s := range slice {
 		if s == item {
 			return true
 		}
 	}
+
 	return false
 }

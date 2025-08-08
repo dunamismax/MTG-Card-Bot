@@ -1,3 +1,4 @@
+// Package scryfall provides a client for interacting with the Scryfall API.
 package scryfall
 
 import (
@@ -14,16 +15,21 @@ import (
 )
 
 const (
-	BaseURL   = "https://api.scryfall.com"
+	// BaseURL is the base URL for the Scryfall API.
+	BaseURL = "https://api.scryfall.com"
+	// UserAgent is the User-Agent header for API requests.
 	UserAgent = "MTGDiscordBot/1.0"
-	RateLimit = 100 * time.Millisecond // 10 requests per second as recommended
+	// RateLimit defines the rate limit for API requests (10 requests per second as recommended).
+	RateLimit = 100 * time.Millisecond
 )
 
+// Client represents a Scryfall API client with rate limiting.
 type Client struct {
 	httpClient  *http.Client
 	rateLimiter *time.Ticker
 }
 
+// Card represents a Magic: The Gathering card from the Scryfall API.
 type Card struct {
 	Object       string            `json:"object"`
 	ID           string            `json:"id"`
@@ -50,6 +56,7 @@ type Card struct {
 	HighresImage bool              `json:"highres_image"`
 }
 
+// CardFace represents one face of a multi-faced card.
 type CardFace struct {
 	Object     string            `json:"object"`
 	Name       string            `json:"name"`
@@ -61,6 +68,7 @@ type CardFace struct {
 	ImageUris  map[string]string `json:"image_uris,omitempty"`
 }
 
+// Prices represents the pricing information for a card.
 type Prices struct {
 	USD     *string `json:"usd"`
 	USDFoil *string `json:"usd_foil"`
@@ -69,6 +77,7 @@ type Prices struct {
 	Tix     *string `json:"tix"`
 }
 
+// SearchResult represents the result of a card search query.
 type SearchResult struct {
 	Object     string `json:"object"`
 	TotalCards int    `json:"total_cards"`
@@ -77,7 +86,8 @@ type SearchResult struct {
 	Data       []Card `json:"data"`
 }
 
-type ErrorResponse struct {
+// Error represents an error response from the Scryfall API.
+type Error struct {
 	Object   string   `json:"object"`
 	Code     string   `json:"code"`
 	Status   int      `json:"status"`
@@ -86,12 +96,12 @@ type ErrorResponse struct {
 	Warnings []string `json:"warnings,omitempty"`
 }
 
-func (e ErrorResponse) Error() string {
+func (e Error) Error() string {
 	return fmt.Sprintf("scryfall api error: %s (status: %d)", e.Details, e.Status)
 }
 
-// GetErrorType returns the error type for metrics tracking
-func (e ErrorResponse) GetErrorType() errors.ErrorType {
+// GetErrorType returns the error type for metrics tracking.
+func (e Error) GetErrorType() errors.ErrorType {
 	switch e.Status {
 	case 404:
 		return errors.ErrorTypeNotFound
@@ -102,6 +112,7 @@ func (e ErrorResponse) GetErrorType() errors.ErrorType {
 	}
 }
 
+// NewClient creates a new Scryfall API client with default configuration.
 func NewClient() *Client {
 	return &Client{
 		httpClient: &http.Client{
@@ -115,7 +126,7 @@ func (c *Client) request(endpoint string) (*http.Response, error) {
 	start := time.Now()
 	logger := logging.WithComponent("scryfall")
 
-	// Rate limiting
+	// Rate limiting.
 	<-c.rateLimiter.C
 
 	req, err := http.NewRequest("GET", BaseURL+endpoint, nil)
@@ -135,6 +146,7 @@ func (c *Client) request(endpoint string) (*http.Response, error) {
 	if err != nil {
 		metrics.RecordAPIRequest(false, responseTime)
 		logging.LogError(logger, errors.NewNetworkError("HTTP request failed", err), "API request failed")
+
 		return nil, errors.NewNetworkError("failed to execute HTTP request", err)
 	}
 
@@ -146,23 +158,27 @@ func (c *Client) request(endpoint string) (*http.Response, error) {
 				logger.Warn("Failed to close response body", "error", closeErr)
 			}
 		}()
-		var errResp ErrorResponse
+
+		var errResp Error
 		if err := json.NewDecoder(resp.Body).Decode(&errResp); err != nil {
 			metrics.RecordAPIRequest(false, responseTime)
 			return nil, errors.FromHTTPStatus(resp.StatusCode, fmt.Sprintf("HTTP error %d", resp.StatusCode))
 		}
+
 		metrics.RecordAPIRequest(false, responseTime)
-		// Create MTGError for proper metrics tracking
+		// Create MTGError for proper metrics tracking.
 		mtgErr := errors.FromHTTPStatus(errResp.Status, errResp.Details)
 		metrics.RecordError(mtgErr)
+
 		return nil, errResp
 	}
 
 	metrics.RecordAPIRequest(true, responseTime)
+
 	return resp, nil
 }
 
-// GetCardByName searches for a card by name using fuzzy matching
+// GetCardByName searches for a card by name using fuzzy matching.
 func (c *Client) GetCardByName(name string) (*Card, error) {
 	logger := logging.WithComponent("scryfall").With("card_name", name)
 
@@ -177,6 +193,7 @@ func (c *Client) GetCardByName(name string) (*Card, error) {
 		logging.LogError(logger, err, "Failed to request card by name")
 		return nil, errors.NewAPIError("failed to fetch card by name", err)
 	}
+
 	defer func() {
 		if closeErr := resp.Body.Close(); closeErr != nil {
 			logger.Warn("Failed to close response body", "error", closeErr)
@@ -189,10 +206,11 @@ func (c *Client) GetCardByName(name string) (*Card, error) {
 	}
 
 	logger.Debug("Successfully retrieved card", "card_name", card.Name)
+
 	return &card, nil
 }
 
-// GetCardByExactName searches for a card by exact name match
+// GetCardByExactName searches for a card by exact name match.
 func (c *Client) GetCardByExactName(name string) (*Card, error) {
 	logger := logging.WithComponent("scryfall").With("card_name", name)
 
@@ -207,6 +225,7 @@ func (c *Client) GetCardByExactName(name string) (*Card, error) {
 		logging.LogError(logger, err, "Failed to request card by exact name")
 		return nil, errors.NewAPIError("failed to fetch card by exact name", err)
 	}
+
 	defer func() {
 		if closeErr := resp.Body.Close(); closeErr != nil {
 			logger.Warn("Failed to close response body", "error", closeErr)
@@ -219,10 +238,11 @@ func (c *Client) GetCardByExactName(name string) (*Card, error) {
 	}
 
 	logger.Debug("Successfully retrieved card by exact name", "card_name", card.Name)
+
 	return &card, nil
 }
 
-// GetRandomCard returns a random Magic card
+// GetRandomCard returns a random Magic card.
 func (c *Client) GetRandomCard() (*Card, error) {
 	logger := logging.WithComponent("scryfall")
 	endpoint := "/cards/random"
@@ -232,6 +252,7 @@ func (c *Client) GetRandomCard() (*Card, error) {
 		logging.LogError(logger, err, "Failed to request random card")
 		return nil, errors.NewAPIError("failed to fetch random card", err)
 	}
+
 	defer func() {
 		if closeErr := resp.Body.Close(); closeErr != nil {
 			logger.Warn("Failed to close response body", "error", closeErr)
@@ -244,10 +265,11 @@ func (c *Client) GetRandomCard() (*Card, error) {
 	}
 
 	logger.Debug("Successfully retrieved random card", "card_name", card.Name)
+
 	return &card, nil
 }
 
-// SearchCards performs a full-text search for cards
+// SearchCards performs a full-text search for cards.
 func (c *Client) SearchCards(query string) (*SearchResult, error) {
 	logger := logging.WithComponent("scryfall")
 
@@ -262,6 +284,7 @@ func (c *Client) SearchCards(query string) (*SearchResult, error) {
 		logging.LogError(logger, err, "Failed to search cards")
 		return nil, errors.NewAPIError("failed to search cards", err)
 	}
+
 	defer func() {
 		if closeErr := resp.Body.Close(); closeErr != nil {
 			logger.Warn("Failed to close response body", "error", closeErr)
@@ -274,30 +297,32 @@ func (c *Client) SearchCards(query string) (*SearchResult, error) {
 	}
 
 	logger.Debug("Successfully searched cards", "query", query, "results", result.TotalCards)
+
 	return &result, nil
 }
 
-// Close stops the rate limiter ticker
+// Close stops the rate limiter ticker.
 func (c *Client) Close() {
 	if c.rateLimiter != nil {
 		c.rateLimiter.Stop()
 	}
 }
 
-// GetBestImageURL returns the highest quality image URL available for a card
+// GetBestImageURL returns the highest quality image URL available for a card.
 func (c *Card) GetBestImageURL() string {
 	var imageUris map[string]string
 
-	// For double-faced cards, prefer the first face
-	if len(c.CardFaces) > 0 && c.CardFaces[0].ImageUris != nil {
+	// For double-faced cards, prefer the first face.
+	switch {
+	case len(c.CardFaces) > 0 && c.CardFaces[0].ImageUris != nil:
 		imageUris = c.CardFaces[0].ImageUris
-	} else if c.ImageUris != nil {
+	case c.ImageUris != nil:
 		imageUris = c.ImageUris
-	} else {
+	default:
 		return ""
 	}
 
-	// Prefer highest quality images in order
+	// Prefer highest quality images in order.
 	imagePreference := []string{"png", "large", "normal", "small"}
 
 	for _, format := range imagePreference {
@@ -306,7 +331,7 @@ func (c *Card) GetBestImageURL() string {
 		}
 	}
 
-	// Return any available image if none of the preferred formats exist
+	// Return any available image if none of the preferred formats exist.
 	for _, url := range imageUris {
 		return url
 	}
@@ -314,30 +339,31 @@ func (c *Card) GetBestImageURL() string {
 	return ""
 }
 
-// GetDisplayName returns the appropriate display name for the card
+// GetDisplayName returns the appropriate display name for the card.
 func (c *Card) GetDisplayName() string {
 	if c.Name != "" {
 		return c.Name
 	}
 
-	// For multi-faced cards without a combined name
+	// For multi-faced cards without a combined name.
 	if len(c.CardFaces) > 0 {
 		names := make([]string, len(c.CardFaces))
 		for i, face := range c.CardFaces {
 			names[i] = face.Name
 		}
+
 		return strings.Join(names, " // ")
 	}
 
 	return "Unknown Card"
 }
 
-// IsValidCard checks if the card has valid data for display
+// IsValidCard checks if the card has valid data for display.
 func (c *Card) IsValidCard() bool {
 	return c.Object == "card" && (c.Name != "" || len(c.CardFaces) > 0)
 }
 
-// HasImage checks if the card has at least one image available
+// HasImage checks if the card has at least one image available.
 func (c *Card) HasImage() bool {
 	return c.GetBestImageURL() != ""
 }

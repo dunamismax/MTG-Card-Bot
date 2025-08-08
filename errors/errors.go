@@ -1,26 +1,37 @@
+// Package errors provides custom error types and utilities for the MTG Card Bot.
 package errors
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 )
 
-// ErrorType represents the category of error that occurred
+// ErrorType represents the category of error that occurred.
 type ErrorType string
 
 const (
-	ErrorTypeAPI        ErrorType = "api_error"
-	ErrorTypeConfig     ErrorType = "config_error"
-	ErrorTypeDiscord    ErrorType = "discord_error"
+	// ErrorTypeAPI represents an API-related error.
+	ErrorTypeAPI ErrorType = "api_error"
+	// ErrorTypeConfig represents a configuration error.
+	ErrorTypeConfig ErrorType = "config_error"
+	// ErrorTypeDiscord represents a Discord-related error.
+	ErrorTypeDiscord ErrorType = "discord_error"
+	// ErrorTypeValidation represents a validation error.
 	ErrorTypeValidation ErrorType = "validation_error"
-	ErrorTypeNotFound   ErrorType = "not_found_error"
-	ErrorTypeRateLimit  ErrorType = "rate_limit_error"
-	ErrorTypeNetwork    ErrorType = "network_error"
-	ErrorTypeInternal   ErrorType = "internal_error"
-	ErrorTypeCache      ErrorType = "cache_error"
+	// ErrorTypeNotFound represents a not found error.
+	ErrorTypeNotFound ErrorType = "not_found_error"
+	// ErrorTypeRateLimit represents a rate limit error.
+	ErrorTypeRateLimit ErrorType = "rate_limit_error"
+	// ErrorTypeNetwork represents a network error.
+	ErrorTypeNetwork ErrorType = "network_error"
+	// ErrorTypeInternal represents an internal error.
+	ErrorTypeInternal ErrorType = "internal_error"
+	// ErrorTypeCache represents a cache error.
+	ErrorTypeCache ErrorType = "cache_error"
 )
 
-// MTGError represents a categorized error with additional context
+// MTGError represents a categorized error with additional context.
 type MTGError struct {
 	Type       ErrorType
 	Message    string
@@ -33,6 +44,7 @@ func (e *MTGError) Error() string {
 	if e.Cause != nil {
 		return fmt.Sprintf("%s: %s (caused by: %v)", e.Type, e.Message, e.Cause)
 	}
+
 	return fmt.Sprintf("%s: %s", e.Type, e.Message)
 }
 
@@ -40,7 +52,7 @@ func (e *MTGError) Unwrap() error {
 	return e.Cause
 }
 
-// NewAPIError creates a new API-related error
+// NewAPIError creates a new API-related error.
 func NewAPIError(message string, cause error) *MTGError {
 	return &MTGError{
 		Type:    ErrorTypeAPI,
@@ -49,7 +61,7 @@ func NewAPIError(message string, cause error) *MTGError {
 	}
 }
 
-// NewConfigError creates a new configuration error
+// NewConfigError creates a new configuration error.
 func NewConfigError(message string, cause error) *MTGError {
 	return &MTGError{
 		Type:    ErrorTypeConfig,
@@ -58,7 +70,7 @@ func NewConfigError(message string, cause error) *MTGError {
 	}
 }
 
-// NewDiscordError creates a new Discord-related error
+// NewDiscordError creates a new Discord-related error.
 func NewDiscordError(message string, cause error) *MTGError {
 	return &MTGError{
 		Type:    ErrorTypeDiscord,
@@ -67,7 +79,7 @@ func NewDiscordError(message string, cause error) *MTGError {
 	}
 }
 
-// NewValidationError creates a new validation error
+// NewValidationError creates a new validation error.
 func NewValidationError(message string) *MTGError {
 	return &MTGError{
 		Type:    ErrorTypeValidation,
@@ -75,7 +87,7 @@ func NewValidationError(message string) *MTGError {
 	}
 }
 
-// NewNotFoundError creates a new not found error
+// NewNotFoundError creates a new not found error.
 func NewNotFoundError(message string) *MTGError {
 	return &MTGError{
 		Type:    ErrorTypeNotFound,
@@ -83,7 +95,7 @@ func NewNotFoundError(message string) *MTGError {
 	}
 }
 
-// NewRateLimitError creates a new rate limit error
+// NewRateLimitError creates a new rate limit error.
 func NewRateLimitError(message string, retryAfter int) *MTGError {
 	return &MTGError{
 		Type:    ErrorTypeRateLimit,
@@ -94,7 +106,7 @@ func NewRateLimitError(message string, retryAfter int) *MTGError {
 	}
 }
 
-// NewNetworkError creates a new network error
+// NewNetworkError creates a new network error.
 func NewNetworkError(message string, cause error) *MTGError {
 	return &MTGError{
 		Type:    ErrorTypeNetwork,
@@ -103,7 +115,7 @@ func NewNetworkError(message string, cause error) *MTGError {
 	}
 }
 
-// NewInternalError creates a new internal error
+// NewInternalError creates a new internal error.
 func NewInternalError(message string, cause error) *MTGError {
 	return &MTGError{
 		Type:    ErrorTypeInternal,
@@ -112,7 +124,7 @@ func NewInternalError(message string, cause error) *MTGError {
 	}
 }
 
-// NewCacheError creates a new cache-related error
+// NewCacheError creates a new cache-related error.
 func NewCacheError(message string, cause error) *MTGError {
 	return &MTGError{
 		Type:    ErrorTypeCache,
@@ -121,15 +133,17 @@ func NewCacheError(message string, cause error) *MTGError {
 	}
 }
 
-// IsErrorType checks if an error is of a specific type
+// IsErrorType checks if an error is of a specific type.
 func IsErrorType(err error, errorType ErrorType) bool {
-	if mtgErr, ok := err.(*MTGError); ok {
+	var mtgErr *MTGError
+	if errors.As(err, &mtgErr) {
 		return mtgErr.Type == errorType
 	}
+
 	return false
 }
 
-// FromHTTPStatus creates an appropriate error based on HTTP status code
+// FromHTTPStatus creates an appropriate error based on HTTP status code.
 func FromHTTPStatus(statusCode int, message string) *MTGError {
 	switch {
 	case statusCode == http.StatusNotFound:

@@ -1,9 +1,11 @@
 //go:build mage
 
+// Package main provides Mage build targets for the MTG Card Bot project.
 package main
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -25,10 +27,10 @@ const (
 	tmpDir      = "tmp"
 )
 
-// Default target to run when none is specified
+// Default target to run when none is specified.
 var Default = Build
 
-// loadEnvFile loads environment variables from .env file if it exists
+// loadEnvFile loads environment variables from .env file if it exists.
 func loadEnvFile() error {
 	envFile := ".env"
 	if _, err := os.Stat(envFile); os.IsNotExist(err) {
@@ -40,7 +42,12 @@ func loadEnvFile() error {
 	if err != nil {
 		return fmt.Errorf("failed to open .env file: %w", err)
 	}
-	defer file.Close()
+
+	defer func() {
+		if err := file.Close(); err != nil {
+			fmt.Printf("Warning: failed to close .env file: %v\n", err)
+		}
+	}()
 
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
@@ -62,15 +69,21 @@ func loadEnvFile() error {
 
 			// Only set if not already set by system environment
 			if os.Getenv(key) == "" {
-				os.Setenv(key, value)
+				if err := os.Setenv(key, value); err != nil {
+					fmt.Printf("Warning: failed to set environment variable %s: %v\n", key, err)
+				}
 			}
 		}
 	}
 
-	return scanner.Err()
+	if err := scanner.Err(); err != nil {
+		return fmt.Errorf("failed to scan .env file: %w", err)
+	}
+
+	return nil
 }
 
-// Build builds the MTG Card Bot
+// Build builds the MTG Card Bot.
 func Build() error {
 	fmt.Println("Building MTG Card Bot...")
 
@@ -79,13 +92,14 @@ func Build() error {
 	}
 
 	fmt.Println("Successfully built MTG Card Bot!")
+
 	return showBuildInfo()
 }
 
 func buildBot(bot string) error {
 	fmt.Printf("  Building %s...\n", bot)
 
-	if err := os.MkdirAll(buildDir, 0755); err != nil {
+	if err := os.MkdirAll(buildDir, 0750); err != nil {
 		return fmt.Errorf("failed to create build directory: %w", err)
 	}
 
@@ -97,14 +111,18 @@ func buildBot(bot string) error {
 		binaryPath += ".exe"
 	}
 
-	return sh.Run("go", "build", "-ldflags="+ldflags, "-o", binaryPath, "main.go")
+	if err := sh.Run("go", "build", "-ldflags="+ldflags, "-o", binaryPath, "main.go"); err != nil {
+		return fmt.Errorf("failed to build %s: %w", bot, err)
+	}
+
+	return nil
 }
 
 func getCurrentTime() string {
 	return time.Now().UTC().Format("2006-01-02T15:04:05Z")
 }
 
-// getGoBinaryPath finds the path to a Go binary, checking GOBIN, GOPATH/bin, and PATH
+// getGoBinaryPath finds the path to a Go binary, checking GOBIN, GOPATH/bin, and PATH.
 func getGoBinaryPath(binaryName string) (string, error) {
 	// First check if it's in PATH
 	if err := sh.Run("which", binaryName); err == nil {
@@ -137,9 +155,8 @@ func getGoBinaryPath(binaryName string) (string, error) {
 	return "", fmt.Errorf("%s not found in PATH, GOBIN, or GOPATH/bin", binaryName)
 }
 
-// Run runs the MTG Card Bot
+// Run runs the MTG Card Bot.
 func Run() error {
-
 	// Load environment variables from .env file
 	if err := loadEnvFile(); err != nil {
 		return fmt.Errorf("failed to load .env file: %w", err)
@@ -150,10 +167,15 @@ func Run() error {
 	}
 
 	fmt.Printf("Starting %s Discord bot...\n", botName)
-	return sh.RunWith(map[string]string{"BOT_NAME": botName}, "go", "run", "main.go")
+
+	if err := sh.RunWith(map[string]string{"BOT_NAME": botName}, "go", "run", "main.go"); err != nil {
+		return fmt.Errorf("failed to run bot: %w", err)
+	}
+
+	return nil
 }
 
-// Dev runs the MTG Card Bot in development mode with auto-restart
+// Dev runs the MTG Card Bot in development mode with auto-restart.
 func Dev() error {
 	// Check if main.go exists
 	if _, err := os.Stat("main.go"); os.IsNotExist(err) {
@@ -168,6 +190,7 @@ func Dev() error {
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 
 	restartCount := 0
+
 	for {
 		// Load environment variables fresh each restart
 		if err := loadEnvFile(); err != nil {
@@ -190,6 +213,7 @@ func Dev() error {
 
 		// Wait for either the process to finish or a signal
 		done := make(chan error, 1)
+
 		go func() {
 			done <- cmd.Wait()
 		}()
@@ -204,18 +228,21 @@ func Dev() error {
 			// Wait for the process to finish gracefully
 			<-done
 			fmt.Println("Development mode stopped.")
+
 			return nil
 
 		case err := <-done:
 			if err != nil {
 				// Check if it was interrupted (graceful shutdown)
-				if exitError, ok := err.(*exec.ExitError); ok {
+				var exitError *exec.ExitError
+				if errors.As(err, &exitError) {
 					if exitError.ExitCode() == 1 {
 						// Exit code 1 could be graceful shutdown, check if it was a signal
 						fmt.Printf("Bot %s exited with code 1 (likely graceful shutdown).\n", botName)
 						return nil
 					}
 				}
+
 				restartCount++
 				fmt.Printf("Bot crashed: %v. Restarting in 3 seconds... (restart #%d)\n", err, restartCount)
 				time.Sleep(3 * time.Second)
@@ -230,11 +257,9 @@ func Dev() error {
 			return fmt.Errorf("bot has crashed too many times (>10), stopping auto-restart")
 		}
 	}
-
-	return nil
 }
 
-// Fmt formats and tidies code using goimports and standard tooling
+// Fmt formats and tidies code using goimports and standard tooling.
 func Fmt() error {
 	fmt.Println("Formatting and tidying...")
 
@@ -245,15 +270,18 @@ func Fmt() error {
 
 	// Use goimports for better import management and formatting
 	fmt.Println("  Running goimports...")
+
 	goimportsPath, err := getGoBinaryPath("goimports")
 	if err != nil {
 		fmt.Printf("Warning: goimports not found, falling back to go fmt: %v\n", err)
+
 		if err := sh.RunV("go", "fmt", "./..."); err != nil {
 			return fmt.Errorf("failed to format code: %w", err)
 		}
 	} else {
 		if err := sh.RunV(goimportsPath, "-w", "."); err != nil {
 			fmt.Printf("Warning: goimports failed, falling back to go fmt: %v\n", err)
+
 			if err := sh.RunV("go", "fmt", "./..."); err != nil {
 				return fmt.Errorf("failed to format code: %w", err)
 			}
@@ -263,28 +291,40 @@ func Fmt() error {
 	return nil
 }
 
-// Vet analyzes code for common errors
+// Vet analyzes code for common errors.
 func Vet() error {
 	fmt.Println("Running go vet...")
-	return sh.RunV("go", "vet", "./...")
+
+	if err := sh.RunV("go", "vet", "./..."); err != nil {
+		return fmt.Errorf("go vet failed: %w", err)
+	}
+
+	return nil
 }
 
-// VulnCheck scans for known vulnerabilities
+// VulnCheck scans for known vulnerabilities.
 func VulnCheck() error {
 	fmt.Println("Running vulnerability check...")
+
 	govulncheckPath, err := getGoBinaryPath("govulncheck")
 	if err != nil {
 		return fmt.Errorf("govulncheck not found: %w", err)
 	}
-	return sh.RunV(govulncheckPath, "./...")
+
+	if err := sh.RunV(govulncheckPath, "./..."); err != nil {
+		return fmt.Errorf("govulncheck failed: %w", err)
+	}
+
+	return nil
 }
 
-// Lint runs golangci-lint with comprehensive linting rules
+// Lint runs golangci-lint with comprehensive linting rules.
 func Lint() error {
 	fmt.Println("Running golangci-lint...")
 
 	// Ensure the correct version of golangci-lint v2 is installed
 	fmt.Println("  Ensuring golangci-lint v2 is installed...")
+
 	if err := sh.RunV("go", "install", "github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest"); err != nil {
 		return fmt.Errorf("failed to install golangci-lint v2: %w", err)
 	}
@@ -295,10 +335,14 @@ func Lint() error {
 		return fmt.Errorf("golangci-lint not found after installation: %w", err)
 	}
 
-	return sh.RunV(lintPath, "run", "./...")
+	if err := sh.RunV(lintPath, "run", "./..."); err != nil {
+		return fmt.Errorf("golangci-lint failed: %w", err)
+	}
+
+	return nil
 }
 
-// Clean removes built binaries and generated files
+// Clean removes built binaries and generated files.
 func Clean() error {
 	fmt.Println("Cleaning up...")
 
@@ -313,10 +357,11 @@ func Clean() error {
 	}
 
 	fmt.Println("Clean complete!")
+
 	return nil
 }
 
-// Reset completely resets the repository to a fresh state
+// Reset completely resets the repository to a fresh state.
 func Reset() error {
 	fmt.Println("Resetting repository to clean state...")
 
@@ -327,21 +372,24 @@ func Reset() error {
 
 	// Tidy modules
 	fmt.Println("Tidying Go modules...")
+
 	if err := sh.RunV("go", "mod", "tidy"); err != nil {
 		return fmt.Errorf("failed to tidy modules: %w", err)
 	}
 
 	// Download dependencies
 	fmt.Println("Downloading fresh dependencies...")
+
 	if err := sh.RunV("go", "mod", "download"); err != nil {
 		return fmt.Errorf("failed to download dependencies: %w", err)
 	}
 
 	fmt.Println("Reset complete! Repository is now in fresh state.")
+
 	return nil
 }
 
-// Setup installs required development tools
+// Setup installs required development tools.
 func Setup() error {
 	fmt.Println("Setting up Discord bot development environment...")
 
@@ -353,6 +401,7 @@ func Setup() error {
 
 	for tool, pkg := range tools {
 		fmt.Printf("  Installing %s...\n", tool)
+
 		if err := sh.RunV("go", "install", pkg); err != nil {
 			return fmt.Errorf("failed to install %s: %w", tool, err)
 		}
@@ -360,6 +409,7 @@ func Setup() error {
 
 	// Download module dependencies
 	fmt.Println("Downloading dependencies...")
+
 	if err := sh.RunV("go", "mod", "download"); err != nil {
 		return fmt.Errorf("failed to download dependencies: %w", err)
 	}
@@ -374,39 +424,37 @@ func Setup() error {
 	return nil
 }
 
-// CI runs the complete CI pipeline
-func CI() error {
+// CI runs the complete CI pipeline.
+func CI() {
 	fmt.Println("Running complete CI pipeline...")
 	mg.SerialDeps(Fmt, Vet, Lint, Build, showBuildInfo)
-	return nil
 }
 
-// Quality runs all quality checks
+// Quality runs all quality checks.
 func Quality() error {
 	fmt.Println("Running all quality checks...")
 	mg.Deps(Vet, Lint, VulnCheck)
+
 	return nil
 }
 
-// Info shows information about the MTG Card Bot
-func Info() error {
+// Info shows information about the MTG Card Bot.
+func Info() {
 	fmt.Println("MTG Card Discord Bot")
 	fmt.Println("===================")
 
 	if _, err := os.Stat("main.go"); os.IsNotExist(err) {
 		fmt.Printf("Main file not found: main.go\n")
-		return nil
+		return
 	}
 
 	fmt.Printf("Bot name: %s\n", botName)
 	fmt.Printf("Project root: %s\n", ".")
 	fmt.Printf("Main file: %s\n", "main.go")
-
-	return nil
 }
 
-// Status shows the current status of the development environment
-func Status() error {
+// Status shows the current status of the development environment.
+func Status() {
 	fmt.Println("MTG Card Bot Development Environment Status")
 	fmt.Println("==========================================")
 
@@ -439,11 +487,9 @@ func Status() error {
 	} else {
 		fmt.Println("Built binaries: None found")
 	}
-
-	return nil
 }
 
-// Help prints a help message with available commands
+// Help prints a help message with available commands.
 func Help() {
 	fmt.Println(`
 MTG Card Bot Magefile
@@ -481,7 +527,7 @@ Examples:
     `)
 }
 
-// showBuildInfo displays information about the built binaries
+// showBuildInfo displays information about the built binaries.
 func showBuildInfo() error {
 	fmt.Println("\nBuild Information:")
 
@@ -507,6 +553,7 @@ func showBuildInfo() error {
 	}
 
 	fmt.Printf("   Built binaries (%d):\n", len(entries))
+
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			if info, err := entry.Info(); err == nil {
@@ -521,7 +568,7 @@ func showBuildInfo() error {
 	return nil
 }
 
-// Aliases for common commands
+// Aliases for common commands.
 var Aliases = map[string]interface{}{
 	"b":  Build,
 	"f":  Fmt,

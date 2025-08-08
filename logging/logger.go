@@ -1,27 +1,34 @@
+// Package logging provides structured logging functionality using slog.
 package logging
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"os"
 	"strings"
 
-	"github.com/dunamismax/MTG-Card-Bot/errors"
+	mtgErrors "github.com/dunamismax/MTG-Card-Bot/errors"
 )
 
+// DefaultLogger is the global logger instance.
 var DefaultLogger *slog.Logger
 
-// LogLevel represents the logging level
+// LogLevel represents the logging level.
 type LogLevel string
 
 const (
+	// LevelDebug represents the debug logging level.
 	LevelDebug LogLevel = "debug"
-	LevelInfo  LogLevel = "info"
-	LevelWarn  LogLevel = "warn"
+	// LevelInfo represents the info logging level.
+	LevelInfo LogLevel = "info"
+	// LevelWarn represents the warning logging level.
+	LevelWarn LogLevel = "warn"
+	// LevelError represents the error logging level.
 	LevelError LogLevel = "error"
 )
 
-// InitializeLogger initializes the global logger with the specified level and format
+// InitializeLogger initializes the global logger with the specified level and format.
 func InitializeLogger(level string, jsonFormat bool) {
 	var slogLevel slog.Level
 
@@ -40,8 +47,8 @@ func InitializeLogger(level string, jsonFormat bool) {
 
 	opts := &slog.HandlerOptions{
 		Level: slogLevel,
-		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
-			// Customize timestamp format
+		ReplaceAttr: func(_ []string, a slog.Attr) slog.Attr {
+			// Customize timestamp format.
 			if a.Key == slog.TimeKey {
 				a.Value = slog.StringValue(a.Value.Time().Format("2006-01-02T15:04:05.000Z07:00"))
 			}
@@ -60,34 +67,35 @@ func InitializeLogger(level string, jsonFormat bool) {
 	slog.SetDefault(DefaultLogger)
 }
 
-// WithContext returns a logger with context values
-func WithContext(ctx context.Context) *slog.Logger {
+// WithContext returns a logger with context values.
+func WithContext(_ context.Context) *slog.Logger {
 	return DefaultLogger.With()
 }
 
-// WithComponent returns a logger with a component field
+// WithComponent returns a logger with a component field.
 func WithComponent(component string) *slog.Logger {
 	return DefaultLogger.With("component", component)
 }
 
-// WithUser returns a logger with user information
+// WithUser returns a logger with user information.
 func WithUser(userID, username string) *slog.Logger {
 	return DefaultLogger.With("user_id", userID, "username", username)
 }
 
-// WithCommand returns a logger with command information
+// WithCommand returns a logger with command information.
 func WithCommand(command string) *slog.Logger {
 	return DefaultLogger.With("command", command)
 }
 
-// WithCard returns a logger with card information
+// WithCard returns a logger with card information.
 func WithCard(cardName string) *slog.Logger {
 	return DefaultLogger.With("card_name", cardName)
 }
 
-// LogError logs an MTGError with appropriate structured fields
+// LogError logs an MTGError with appropriate structured fields.
 func LogError(logger *slog.Logger, err error, message string) {
-	if mtgErr, ok := err.(*errors.MTGError); ok {
+	var mtgErr *mtgErrors.MTGError
+	if errors.As(err, &mtgErr) {
 		attrs := []slog.Attr{
 			slog.String("error_type", string(mtgErr.Type)),
 			slog.String("error_message", mtgErr.Message),
@@ -111,47 +119,47 @@ func LogError(logger *slog.Logger, err error, message string) {
 	}
 }
 
-// Debug logs a debug message with optional attributes
+// Debug logs a debug message with optional attributes.
 func Debug(msg string, args ...any) {
 	DefaultLogger.Debug(msg, args...)
 }
 
-// Info logs an info message with optional attributes
+// Info logs an info message with optional attributes.
 func Info(msg string, args ...any) {
 	DefaultLogger.Info(msg, args...)
 }
 
-// Warn logs a warning message with optional attributes
+// Warn logs a warning message with optional attributes.
 func Warn(msg string, args ...any) {
 	DefaultLogger.Warn(msg, args...)
 }
 
-// Error logs an error message with optional attributes
+// Error logs an error message with optional attributes.
 func Error(msg string, args ...any) {
 	DefaultLogger.Error(msg, args...)
 }
 
-// DebugWithContext logs a debug message with context
+// DebugWithContext logs a debug message with context.
 func DebugWithContext(ctx context.Context, msg string, args ...any) {
 	DefaultLogger.DebugContext(ctx, msg, args...)
 }
 
-// InfoWithContext logs an info message with context
+// InfoWithContext logs an info message with context.
 func InfoWithContext(ctx context.Context, msg string, args ...any) {
 	DefaultLogger.InfoContext(ctx, msg, args...)
 }
 
-// WarnWithContext logs a warning message with context
+// WarnWithContext logs a warning message with context.
 func WarnWithContext(ctx context.Context, msg string, args ...any) {
 	DefaultLogger.WarnContext(ctx, msg, args...)
 }
 
-// ErrorWithContext logs an error message with context
+// ErrorWithContext logs an error message with context.
 func ErrorWithContext(ctx context.Context, msg string, args ...any) {
 	DefaultLogger.ErrorContext(ctx, msg, args...)
 }
 
-// LogStartup logs application startup information
+// LogStartup logs application startup information.
 func LogStartup(botName, prefix, logLevel string, debugMode bool) {
 	logger := WithComponent("startup")
 	logger.Info("Starting MTG Card Bot",
@@ -162,13 +170,13 @@ func LogStartup(botName, prefix, logLevel string, debugMode bool) {
 	)
 }
 
-// LogShutdown logs application shutdown information
+// LogShutdown logs application shutdown information.
 func LogShutdown() {
 	logger := WithComponent("shutdown")
 	logger.Info("Bot shutdown complete")
 }
 
-// LogAPIRequest logs API request information
+// LogAPIRequest logs API request information.
 func LogAPIRequest(endpoint string, duration int64) {
 	logger := WithComponent("scryfall")
 	logger.Debug("API request completed",
@@ -177,7 +185,7 @@ func LogAPIRequest(endpoint string, duration int64) {
 	)
 }
 
-// LogDiscordCommand logs Discord command execution
+// LogDiscordCommand logs Discord command execution.
 func LogDiscordCommand(userID, username, command string, success bool) {
 	logger := WithComponent("discord").With(
 		"user_id", userID,
@@ -193,7 +201,7 @@ func LogDiscordCommand(userID, username, command string, success bool) {
 	}
 }
 
-// LogCacheOperation logs cache operations
+// LogCacheOperation logs cache operations.
 func LogCacheOperation(operation, key string, hit bool, duration int64) {
 	logger := WithComponent("cache")
 	logger.Debug("Cache operation",
