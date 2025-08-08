@@ -70,8 +70,8 @@ Complete step-by-step guide to deploying your MTG Card Bot on Discord servers.
 1. **Clone Repository**
 
    ```bash
-   git clone https://github.com/dunamismax/go-discord-bots.git
-   cd go-discord-bots
+   git clone https://github.com/dunamismax/MTG-Card-Bot.git
+   cd MTG-Card-Bot
    ```
 
 2. **Install Dependencies**
@@ -184,7 +184,7 @@ Complete step-by-step guide to deploying your MTG Card Bot on Discord servers.
 **Start Development Server:**
 
 ```bash
-mage dev mtg-card-bot
+mage dev
 ```
 
 Expected output:
@@ -409,7 +409,7 @@ Press Ctrl+C to stop.
 3. **Check Logs**: Look for authentication errors
 
    ```bash
-   mage dev mtg-card-bot
+   mage dev
    # or
    sudo journalctl -u mtg-card-bot -f
    ```
@@ -476,7 +476,7 @@ Press Ctrl+C to stop.
 
 ```bash
 # Development mode
-mage dev mtg-card-bot
+mage dev
 
 # Production systemd
 sudo journalctl -u mtg-card-bot -f
@@ -495,7 +495,7 @@ docker logs -f container_name
 
 ### Getting Help
 
-1. **Check Repository Issues**: [GitHub Issues](https://github.com/dunamismax/go-discord-bots/issues)
+1. **Check Repository Issues**: [GitHub Issues](https://github.com/dunamismax/MTG-Card-Bot/issues)
 2. **Discord Developer Documentation**: [Discord API Docs](https://discord.com/developers/docs)
 3. **Scryfall API Status**: [status.scryfall.com](https://status.scryfall.com)
 
@@ -522,7 +522,7 @@ docker logs -f container_name
 
 ```bash
 # Development
-mage dev mtg-card-bot     # Start with auto-restart
+mage dev     # Start with auto-restart
 mage status               # Check environment
 mage build               # Build production binary
 

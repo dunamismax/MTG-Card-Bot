@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
-	"github.com/dunamismax/go-discord-bots/pkg/config"
-	"github.com/dunamismax/go-discord-bots/pkg/scryfall"
+	"github.com/dunamismax/MTG-Card-Bot/pkg/config"
+	"github.com/dunamismax/MTG-Card-Bot/pkg/scryfall"
 )
 
 type Bot struct {

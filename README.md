@@ -3,8 +3,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/dunamismax/go-discord-bots">
-    <img src="https://readme-typing-svg.demolab.com/?font=Fira+Code&size=24&pause=1000&color=00ADD8&center=true&vCenter=true&width=900&lines=Discord+Bot+Monorepo+in+Go;Magic+The+Gathering+Card+Lookup+Bot;Scryfall+API+Integration+with+Rate+Limiting;Rich+Discord+Embeds+with+Card+Images;Fuzzy+Search+and+Random+Card+Features;Auto-Restart+Development+with+Mage;Multi-Bot+Concurrent+Execution;Flexible+Build+System;Environment+Configuration+Management;Single+Binary+Deployments" alt="Typing SVG" />
+  <a href="https://github.com/dunamismax/MTG-Card-Bot">
+    <img src="https://readme-typing-svg.demolab.com/?font=Fira+Code&size=24&pause=1000&color=00ADD8&center=true&vCenter=true&width=900&lines=Magic+The+Gathering+Card+Lookup+Bot;Discord+Bot+in+Go;Scryfall+API+Integration+with+Rate+Limiting;Rich+Discord+Embeds+with+Card+Images;Fuzzy+Search+and+Random+Card+Features;Auto-Restart+Development+with+Mage;Environment+Configuration+Management;Single+Binary+Deployments" alt="Typing SVG" />
   </a>
 </p>
 
@@ -22,32 +22,30 @@
 
 ## About
 
-A Go-based monorepo for creating and running multiple Discord bots from one codebase. Built with a focus on clean architecture, easy maintenance, and quick deployment.
-
-You can run each bot on its own or several at once. The first example bot is a Magic: The Gathering card lookup tool using the Scryfall API.
+A dedicated Magic: The Gathering card lookup Discord bot built in Go. Features fuzzy search, random card discovery, and rich embeds powered by the Scryfall API.
 
 **Highlights:**
 
-* **MTG Card Bot** – Look up cards with fuzzy search, random card feature, and rich embeds
-* **Nice-looking Embeds** – Card images, rarity colors, and detailed info
-* **Monorepo Setup** – Shared packages for config, Discord helpers, and API clients
+* **Fuzzy Card Search** – Find cards with partial names like "jac bele" → "Jace Beleren"
+* **Random Card Discovery** – Get random MTG cards with the `!random` command
+* **Rich Embeds** – Card images, rarity colors, mana costs, and detailed info
 * **Respectful API Use** – Built-in Scryfall rate limiting (10 requests/sec)
-* **Handy Dev Tools** – Auto-restart, build scripts, quality checks
-* **Config Management** – Environment variables, `.env` support, and validation
-* **Easy Deployment** – Single-binary builds with structured logging and graceful shutdown
+* **Development Tools** – Auto-restart, build scripts, quality checks with Mage
+* **Easy Configuration** – Environment variables, `.env` support, and validation
+* **Simple Deployment** – Single-binary builds with structured logging
 
 ---
 
 ## Quick Start
 
 ```bash
-git clone https://github.com/dunamismax/go-discord-bots.git
-cd go-discord-bots
+git clone https://github.com/dunamismax/MTG-Card-Bot.git
+cd MTG-Card-Bot
 go mod tidy
 go install github.com/magefile/mage@latest
 cp .env.example .env  # Add your Discord bot token
 mage setup
-mage dev mtg-card-bot
+mage dev
 ```
 
 **Requirements:** Go 1.24+, Discord Bot Token
@@ -58,9 +56,8 @@ mage dev mtg-card-bot
 
 ```bash
 mage setup         # Install dev tools
-mage dev <bot>     # Run bot with auto-restart
-mage devAll        # Run all bots
-mage build         # Build binaries
+mage dev           # Run bot with auto-restart
+mage build         # Build binary
 mage fmt / lint    # Format & lint checks
 mage test          # Run tests
 mage vulncheck     # Security check
@@ -72,7 +69,7 @@ mage vulncheck     # Security check
   <img src="https://github.com/dunamismax/images/blob/main/golang/discord-bots/mtg-card-bot-gopher.png" alt="mtg-card-bot-gopher" width="300" />
 </p>
 
-## MTG Card Bot Commands
+## Bot Commands
 
 ```bash
 # Card lookup with fuzzy matching
@@ -96,17 +93,20 @@ mage vulncheck     # Security check
 
 ---
 
-## Adding New Bots
+## Development
 
-1. Make a folder in `bots/` and add a `main.go`.
-2. Use shared packages from `pkg/` for config and Discord helpers.
-3. Run `mage listBots` to confirm it’s detected.
-4. Launch it with `mage dev your-bot-name`.
+The bot uses a clean architecture with shared packages:
+
+* `bots/mtg-card-bot/` - Main bot application
+* `pkg/discord/` - Discord client and helpers
+* `pkg/scryfall/` - Scryfall API integration
+
+Start development with `mage dev` for auto-restart functionality.
 
 ---
 
 <p align="center">
-  <img src="https://github.com/dunamismax/images/blob/main/golang/go-logo.png" alt="Go Discord Bots Monorepo Logo" width="300" />
+  <img src="https://github.com/dunamismax/images/blob/main/golang/go-logo.png" alt="MTG Card Bot Logo" width="300" />
 </p>
 
 ## Deployment Options
@@ -138,7 +138,7 @@ MIT – see [LICENSE](LICENSE) for details.
 ---
 
 <p align="center">
-  <strong>Go Discord Bot Monorepo</strong><br>
+  <strong>MTG Card Discord Bot</strong><br>
   <sub>DiscordGo • Scryfall API • Mage • slog • Config • Rate Limiting • Rich Embeds</sub>
 </p>
 

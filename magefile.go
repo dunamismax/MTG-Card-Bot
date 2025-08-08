@@ -18,7 +18,8 @@ import (
 )
 
 const (
-	packageName = "github.com/dunamismax/go-discord-bots"
+	packageName = "github.com/dunamismax/MTG-Card-Bot"
+	botName     = "mtg-card-bot"
 	buildDir    = "bin"
 	tmpDir      = "tmp"
 )
@@ -68,27 +69,15 @@ func loadEnvFile() error {
 	return scanner.Err()
 }
 
-// Build builds all Discord bots
+// Build builds the MTG Card Bot
 func Build() error {
-	fmt.Println("Building all Discord bots...")
+	fmt.Println("Building MTG Card Bot...")
 	
-	bots, err := getBotDirectories()
-	if err != nil {
-		return err
+	if err := buildBot(botName); err != nil {
+		return fmt.Errorf("failed to build %s: %w", botName, err)
 	}
 	
-	if len(bots) == 0 {
-		fmt.Println("No bots found to build")
-		return nil
-	}
-	
-	for _, bot := range bots {
-		if err := buildBot(bot); err != nil {
-			return fmt.Errorf("failed to build %s: %w", bot, err)
-		}
-	}
-	
-	fmt.Printf("Successfully built %d bot(s)!\n", len(bots))
+	fmt.Println("Successfully built MTG Card Bot!")
 	return showBuildInfo()
 }
 
@@ -147,87 +136,33 @@ func getGoBinaryPath(binaryName string) (string, error) {
 	return "", fmt.Errorf("%s not found in PATH, GOBIN, or GOPATH/bin", binaryName)
 }
 
-// Run runs a specific Discord bot
-func Run(bot string) error {
-	if bot == "" {
-		bots, _ := getBotDirectories()
-		if len(bots) > 0 {
-			return fmt.Errorf("bot name is required. Available bots: %s", strings.Join(bots, ", "))
-		}
-		return fmt.Errorf("bot name is required. No bots found in bots/ directory")
-	}
+// Run runs the MTG Card Bot
+func Run() error {
 	
 	// Load environment variables from .env file
 	if err := loadEnvFile(); err != nil {
 		return fmt.Errorf("failed to load .env file: %w", err)
 	}
 	
-	botDir := filepath.Join("bots", bot)
+	botDir := filepath.Join("bots", botName)
 	if _, err := os.Stat(botDir); os.IsNotExist(err) {
-		return fmt.Errorf("bot %s does not exist", bot)
+		return fmt.Errorf("bot %s does not exist", botName)
 	}
 	
-	fmt.Printf("Starting %s Discord bot...\n", bot)
-	return sh.RunWith(map[string]string{"BOT_NAME": bot}, "go", "run", fmt.Sprintf("./bots/%s/main.go", bot))
+	fmt.Printf("Starting %s Discord bot...\n", botName)
+	return sh.RunWith(map[string]string{"BOT_NAME": botName}, "go", "run", fmt.Sprintf("./bots/%s/main.go", botName))
 }
 
-// RunAll runs all Discord bots concurrently
-func RunAll() error {
-	fmt.Println("Starting all Discord bots...")
-	
-	// Load environment variables from .env file
-	if err := loadEnvFile(); err != nil {
-		return fmt.Errorf("failed to load .env file: %w", err)
-	}
-	
-	bots, err := getBotDirectories()
-	if err != nil {
-		return err
-	}
-	
-	if len(bots) == 0 {
-		return fmt.Errorf("no bots found to run")
-	}
-	
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	
-	for _, bot := range bots {
-		go func(botName string) {
-			cmd := exec.CommandContext(ctx, "go", "run", fmt.Sprintf("./bots/%s/main.go", botName))
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-			cmd.Env = append(os.Environ(), fmt.Sprintf("BOT_NAME=%s", botName))
-			
-			fmt.Printf("[%s] Starting bot...\n", botName)
-			if err := cmd.Run(); err != nil {
-				fmt.Printf("[%s] Bot exited with error: %v\n", botName, err)
-			}
-		}(bot)
-	}
-	
-	// Keep running until interrupted
-	fmt.Printf("All %d bot(s) are running. Press Ctrl+C to stop.\n", len(bots))
-	select {}
-}
 
-// Dev runs a Discord bot in development mode with auto-restart and environment loading
-func Dev(bot string) error {
-	if bot == "" {
-		bots, _ := getBotDirectories()
-		if len(bots) > 0 {
-			return fmt.Errorf("bot name is required. Available bots: %s", strings.Join(bots, ", "))
-		}
-		return fmt.Errorf("bot name is required. No bots found in bots/ directory")
-	}
-	
+// Dev runs the MTG Card Bot in development mode with auto-restart
+func Dev() error {
 	// Check if bot exists
-	botDir := filepath.Join("bots", bot)
+	botDir := filepath.Join("bots", botName)
 	if _, err := os.Stat(botDir); os.IsNotExist(err) {
-		return fmt.Errorf("bot %s does not exist", bot)
+		return fmt.Errorf("bot %s does not exist", botName)
 	}
 	
-	fmt.Printf("Starting %s in development mode with auto-restart...\n", bot)
+	fmt.Printf("Starting %s in development mode with auto-restart...\n", botName)
 	fmt.Println("Press Ctrl+C to stop.")
 	
 	restartCount := 0
@@ -237,13 +172,13 @@ func Dev(bot string) error {
 			fmt.Printf("Warning: failed to load .env file: %v\n", err)
 		}
 		
-		cmd := exec.Command("go", "run", fmt.Sprintf("./bots/%s/main.go", bot))
+		cmd := exec.Command("go", "run", fmt.Sprintf("./bots/%s/main.go", botName))
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
-		cmd.Env = append(os.Environ(), fmt.Sprintf("BOT_NAME=%s", bot))
+		cmd.Env = append(os.Environ(), fmt.Sprintf("BOT_NAME=%s", botName))
 		
 		if restartCount > 0 {
-			fmt.Printf("[Restart #%d] Starting %s...\n", restartCount, bot)
+			fmt.Printf("[Restart #%d] Starting %s...\n", restartCount, botName)
 		}
 		
 		if err := cmd.Run(); err != nil {
@@ -251,7 +186,7 @@ func Dev(bot string) error {
 			fmt.Printf("Bot crashed: %v. Restarting in 3 seconds... (restart #%d)\n", err, restartCount)
 			time.Sleep(3 * time.Second)
 		} else {
-			fmt.Printf("Bot %s exited cleanly.\n", bot)
+			fmt.Printf("Bot %s exited cleanly.\n", botName)
 			break
 		}
 		
@@ -264,61 +199,6 @@ func Dev(bot string) error {
 	return nil
 }
 
-// DevAll runs all bots in development mode
-func DevAll() error {
-	fmt.Println("Starting all bots in development mode...")
-	
-	bots, err := getBotDirectories()
-	if err != nil {
-		return err
-	}
-	
-	if len(bots) == 0 {
-		return fmt.Errorf("no bots found to run")
-	}
-	
-	// Load environment variables
-	if err := loadEnvFile(); err != nil {
-		return fmt.Errorf("failed to load .env file: %w", err)
-	}
-	
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	
-	for _, bot := range bots {
-		go func(botName string) {
-			restartCount := 0
-			for {
-				cmd := exec.CommandContext(ctx, "go", "run", fmt.Sprintf("./bots/%s/main.go", botName))
-				cmd.Stdout = os.Stdout
-				cmd.Stderr = os.Stderr
-				cmd.Env = append(os.Environ(), fmt.Sprintf("BOT_NAME=%s", botName))
-				
-				if restartCount == 0 {
-					fmt.Printf("[%s] Starting bot...\n", botName)
-				} else {
-					fmt.Printf("[%s] Restarting bot... (restart #%d)\n", botName, restartCount)
-				}
-				
-				if err := cmd.Run(); err != nil {
-					restartCount++
-					if restartCount > 5 {
-						fmt.Printf("[%s] Bot has crashed too many times, stopping auto-restart\n", botName)
-						return
-					}
-					fmt.Printf("[%s] Bot crashed: %v. Restarting in 3 seconds...\n", botName, err)
-					time.Sleep(3 * time.Second)
-				} else {
-					fmt.Printf("[%s] Bot exited cleanly\n", botName)
-					return
-				}
-			}
-		}(bot)
-	}
-	
-	fmt.Printf("All %d bot(s) running in development mode. Press Ctrl+C to stop.\n", len(bots))
-	select {}
-}
 
 // Test runs tests for all packages
 func Test() error {
@@ -506,32 +386,28 @@ func Quality() error {
 	return nil
 }
 
-// ListBots lists all available Discord bots
-func ListBots() error {
-	fmt.Println("Available Discord bots:")
+// Info shows information about the MTG Card Bot
+func Info() error {
+	fmt.Println("MTG Card Discord Bot")
+	fmt.Println("===================")
 	
-	bots, err := getBotDirectories()
-	if err != nil {
-		return err
-	}
-	
-	if len(bots) == 0 {
-		fmt.Println("  No bots found in bots/ directory")
+	botDir := filepath.Join("bots", botName)
+	if _, err := os.Stat(botDir); os.IsNotExist(err) {
+		fmt.Printf("Bot directory not found: %s\n", botDir)
 		return nil
 	}
 	
-	for i, bot := range bots {
-		fmt.Printf("  %d. %s\n", i+1, bot)
-	}
+	fmt.Printf("Bot name: %s\n", botName)
+	fmt.Printf("Bot directory: %s\n", botDir)
+	fmt.Printf("Main file: %s\n", filepath.Join(botDir, "main.go"))
 	
-	fmt.Printf("\nTotal: %d bot(s)\n", len(bots))
 	return nil
 }
 
 // Status shows the current status of the development environment
 func Status() error {
-	fmt.Println("Discord Bot Development Environment Status")
-	fmt.Println("=========================================")
+	fmt.Println("MTG Card Bot Development Environment Status")
+	fmt.Println("==========================================")
 	
 	// Check Go version
 	if version, err := sh.Output("go", "version"); err == nil {
@@ -548,14 +424,12 @@ func Status() error {
 		fmt.Println("  Run: cp .env.example .env")
 	}
 	
-	// List available bots
-	bots, err := getBotDirectories()
-	if err != nil {
-		fmt.Printf("Bots: Error reading bots directory (%v)\n", err)
-	} else if len(bots) == 0 {
-		fmt.Println("Bots: No bots found")
+	// Check bot directory
+	botDir := filepath.Join("bots", botName)
+	if _, err := os.Stat(botDir); err == nil {
+		fmt.Printf("Bot: %s found ✓\n", botName)
 	} else {
-		fmt.Printf("Bots: %d found (%s)\n", len(bots), strings.Join(bots, ", "))
+		fmt.Printf("Bot: %s directory missing ✗\n", botName)
 	}
 	
 	// Check if binaries exist
@@ -572,18 +446,16 @@ func Status() error {
 // Help prints a help message with available commands
 func Help() {
 	fmt.Println(`
-Go Discord Bots Magefile
+MTG Card Bot Magefile
 
 Available commands:
 
 Development:
   mage setup (s)        Install all development tools and dependencies
-  mage dev <bot>        Run a specific bot in development mode with auto-restart
-  mage devAll           Run all bots in development mode with auto-restart  
-  mage run <bot>        Build and run a specific bot
-  mage runAll           Run all bots concurrently
-  mage build (b)        Build all Discord bot binaries
-  mage listBots         List all available Discord bots
+  mage dev              Run the bot in development mode with auto-restart
+  mage run              Build and run the bot
+  mage build (b)        Build the bot binary
+  mage info             Show bot information
   mage status           Show development environment status
 
 Testing:
@@ -606,10 +478,10 @@ Other:
   mage help (h)         Show this help message
 
 Examples:
-  mage dev mtg-card-bot    # Run MTG bot in dev mode
-  mage run mtg-card-bot    # Run MTG bot once  
-  mage build               # Build all bots
-  mage runAll              # Run all bots at once
+  mage dev              # Run MTG bot in dev mode
+  mage run              # Run MTG bot once  
+  mage build            # Build the bot
+  mage info             # Show bot information
     `)
 }
 
@@ -653,30 +525,6 @@ func showBuildInfo() error {
 	return nil
 }
 
-func getBotDirectories() ([]string, error) {
-	botsDir := "bots"
-	if _, err := os.Stat(botsDir); os.IsNotExist(err) {
-		return []string{}, nil
-	}
-	
-	entries, err := os.ReadDir(botsDir)
-	if err != nil {
-		return nil, err
-	}
-	
-	var bots []string
-	for _, entry := range entries {
-		if entry.IsDir() {
-			// Check if main.go exists in the bot directory
-			mainFile := filepath.Join(botsDir, entry.Name(), "main.go")
-			if _, err := os.Stat(mainFile); err == nil {
-				bots = append(bots, entry.Name())
-			}
-		}
-	}
-	
-	return bots, nil
-}
 
 // Aliases for common commands
 var Aliases = map[string]interface{}{

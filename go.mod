@@ -1,4 +1,4 @@
-module github.com/dunamismax/go-discord-bots
+module github.com/dunamismax/MTG-Card-Bot
 
 go 1.21
 
