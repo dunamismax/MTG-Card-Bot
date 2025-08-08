@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://github.com/dunamismax/images/blob/main/golang/go-logo.png" alt="Go Discord Bots Monorepo Logo" width="400" />
+  <img src="https://github.com/dunamismax/images/blob/main/golang/discord-bots/mtg.png" alt="MTG" width="300" />
 </p>
 
 <p align="center">
@@ -106,7 +106,7 @@ mage vulncheck     # Security check
 ---
 
 <p align="center">
-  <img src="https://github.com/dunamismax/images/blob/main/discord/mtg-cards-showcase.png" alt="MTG Cards Showcase" width="800" />
+  <img src="https://github.com/dunamismax/images/blob/main/golang/go-logo.png" alt="Go Discord Bots Monorepo Logo" width="300" />
 </p>
 
 ## Deployment Options
