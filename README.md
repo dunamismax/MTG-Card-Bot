@@ -142,8 +142,4 @@ MIT – see [LICENSE](LICENSE) for details.
   <sub>DiscordGo • Scryfall API • Mage • slog • Config • Rate Limiting • Rich Embeds</sub>
 </p>
 
-<p align="center">
-  <img src="https://github.com/dunamismax/images/blob/main/golang/gopher-running-jumping.gif" alt="Gopher Running and Jumping" width="600" />
-</p>
-
 ---
