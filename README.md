@@ -132,19 +132,19 @@ mage vulncheck     # Security check
 ## Bot in Action
 
 <p align="center">
-  <img src="https://github.com/dunamismax/images/blob/main/golang/discord-bots/mtg-card-bot-help.png" alt="Help Command Screenshot" width="500" />
+  <img src="https://github.com/dunamismax/images/blob/main/golang/discord-bots/mtg-card-bot-help-new.png" alt="Help Command Screenshot" width="500" />
   <br>
   <em>Help command showing all available features</em>
 </p>
 
 <p align="center">
-  <img src="https://github.com/dunamismax/images/blob/main/golang/discord-bots/mtg-card-bot-lotus.png" alt="Fuzzy Search Example" width="500" />
+  <img src="https://github.com/dunamismax/images/blob/main/golang/discord-bots/the-one-ring-screenshot.png" alt="Fuzzy Search Example" width="500" />
   <br>
   <em>Fuzzy search in action - "!black lo" finds "Black Lotus"</em>
 </p>
 
 <p align="center">
-  <img src="https://github.com/dunamismax/images/blob/main/golang/discord-bots/mtg-card-bot-stats.png" alt="Stats Command Screenshot" width="500" />
+  <img src="https://github.com/dunamismax/images/blob/main/golang/discord-bots/mtg-card-bot-stats-new.png" alt="Stats Command Screenshot" width="500" />
   <br>
   <em>Performance statistics and monitoring</em>
 </p>
