@@ -173,7 +173,7 @@ func (b *Bot) handleRandomCard(s *discordgo.Session, m *discordgo.MessageCreate,
 		return errors.NewAPIError("failed to fetch random card", err)
 	}
 
-	return b.sendCardMessage(s, m.ChannelID, card)
+	return b.sendCardMessage(s, m.ChannelID, card, false, "")
 }
 
 // handleCardLookup handles card lookup with support for filtering parameters.
@@ -202,6 +202,24 @@ func (b *Bot) handleCardLookup(s *discordgo.Session, m *discordgo.MessageCreate,
 		logger.Debug("Using search endpoint for filtered query")
 
 		card, err = b.scryfallClient.SearchCardFirst(cardQuery)
+
+		// If filtered search fails, extract card name and try fallback
+		if err != nil {
+			cardName := b.extractCardName(cardQuery)
+			if cardName != "" {
+				logger.Debug("Filtered search failed, trying fallback with card name", "fallback_name", cardName)
+
+				card, err = b.cache.GetOrSet(cardName, func(name string) (*scryfall.Card, error) {
+					return b.scryfallClient.GetCardByName(name)
+				})
+				if err == nil {
+					logger.Info("Fallback search successful", "original_query", cardQuery, "fallback_name", cardName)
+					// Update cache metrics for the fallback lookup
+					cacheStats := b.cache.Stats()
+					metrics.Get().UpdateCacheStats(cacheStats.Hits, cacheStats.Misses, int64(cacheStats.Size))
+				}
+			}
+		}
 	} else {
 		// Try to get from cache first for simple name lookups, then fetch from API if not found.
 		card, err = b.cache.GetOrSet(cardQuery, func(name string) (*scryfall.Card, error) {
@@ -219,7 +237,10 @@ func (b *Bot) handleCardLookup(s *discordgo.Session, m *discordgo.MessageCreate,
 		metrics.Get().UpdateCacheStats(cacheStats.Hits, cacheStats.Misses, int64(cacheStats.Size))
 	}
 
-	return b.sendCardMessage(s, m.ChannelID, card)
+	// Check if this was a fallback search
+	usedFallback := hasFilters && err == nil && b.extractCardName(cardQuery) != cardQuery
+
+	return b.sendCardMessage(s, m.ChannelID, card, usedFallback, cardQuery)
 }
 
 // hasFilterParameters checks if the query contains Scryfall filter syntax.
@@ -238,8 +259,46 @@ func (b *Bot) hasFilterParameters(query string) bool {
 	return false
 }
 
+// extractCardName attempts to extract the card name from a filtered query for fallback purposes.
+func (b *Bot) extractCardName(query string) string {
+	// Split query into words
+	words := strings.Fields(query)
+
+	var cardNameParts []string
+
+	for _, word := range words {
+		lowerWord := strings.ToLower(word)
+
+		// Skip known filter patterns
+		if strings.Contains(lowerWord, ":") {
+			continue
+		}
+
+		// Skip standalone filter keywords that don't use colons
+		filterKeywords := []string{"foil", "nonfoil", "etched", "glossy", "textless", "fullart", "borderless", "colorshifted", "tombstone", "legendary", "reprint", "promo", "funny", "timeshifted"}
+		isFilterKeyword := false
+
+		for _, keyword := range filterKeywords {
+			if lowerWord == keyword {
+				isFilterKeyword = true
+				break
+			}
+		}
+
+		if !isFilterKeyword {
+			cardNameParts = append(cardNameParts, word)
+		}
+	}
+
+	// Join the remaining parts to form the card name
+	cardName := strings.Join(cardNameParts, " ")
+	cardName = strings.TrimSpace(cardName)
+
+	return cardName
+}
+
 // sendCardMessage sends a card image and details to a Discord channel.
-func (b *Bot) sendCardMessage(s *discordgo.Session, channelID string, card *scryfall.Card) error {
+func (b *Bot) sendCardMessage(s *discordgo.Session, channelID string, card *scryfall.Card, usedFallback bool, originalQuery string) error {
 	if !card.IsValidCard() {
 		return errors.NewValidationError("received invalid card data from API")
 	}
@@ -300,9 +359,19 @@ func (b *Bot) sendCardMessage(s *discordgo.Session, channelID string, card *scry
 		},
 	}
 
-	// Add mana cost if available.
+	// Add mana cost and fallback notification.
+	var descriptions []string
+
+	if usedFallback {
+		descriptions = append(descriptions, fmt.Sprintf("⚠️ *No exact match found for filters in `%s`, showing closest match*", originalQuery))
+	}
+
 	if card.ManaCost != "" {
-		embed.Description = fmt.Sprintf("**Mana Cost:** %s", card.ManaCost)
+		descriptions = append(descriptions, fmt.Sprintf("**Mana Cost:** %s", card.ManaCost))
+	}
+
+	if len(descriptions) > 0 {
+		embed.Description = strings.Join(descriptions, "\n")
 	}
 
 	// Add artist if available.
