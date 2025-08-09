@@ -301,6 +301,44 @@ func (c *Client) SearchCards(query string) (*SearchResult, error) {
 	return &result, nil
 }
 
+// SearchCardFirst performs a search and returns the first result, useful for filtered card lookups.
+func (c *Client) SearchCardFirst(query string) (*Card, error) {
+	logger := logging.WithComponent("scryfall").With("query", query)
+
+	if query == "" {
+		return nil, errors.NewValidationError("search query cannot be empty")
+	}
+
+	// Add order by relevance and limit to 1 result for efficiency
+	searchQuery := fmt.Sprintf("(%s) order:relevance", query)
+	endpoint := fmt.Sprintf("/cards/search?q=%s", url.QueryEscape(searchQuery))
+
+	resp, err := c.request(endpoint)
+	if err != nil {
+		logging.LogError(logger, err, "Failed to search for first card")
+		return nil, errors.NewAPIError("failed to search for card", err)
+	}
+
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			logger.Warn("Failed to close response body", "error", closeErr)
+		}
+	}()
+
+	var result SearchResult
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, errors.NewAPIError("failed to decode search response", err)
+	}
+
+	if result.TotalCards == 0 || len(result.Data) == 0 {
+		return nil, errors.NewAPIError("no cards found matching query", fmt.Errorf("search returned no results"))
+	}
+
+	logger.Debug("Successfully found card via search", "card_name", result.Data[0].Name, "total_results", result.TotalCards)
+
+	return &result.Data[0], nil
+}
+
 // Close stops the rate limiter ticker.
 func (c *Client) Close() {
 	if c.rateLimiter != nil {

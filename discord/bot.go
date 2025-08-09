@@ -136,12 +136,12 @@ func (b *Bot) messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 	}
 
 	// If no specific handler, treat it as a card lookup.
-	cardName := strings.Join(parts, " ")
-	if err := b.handleCardLookup(s, m, cardName); err != nil {
+	cardQuery := strings.Join(parts, " ")
+	if err := b.handleCardLookup(s, m, cardQuery); err != nil {
 		logger := logging.WithComponent("discord").With(
 			"user_id", m.Author.ID,
 			"username", m.Author.Username,
-			"card_name", cardName,
+			"card_query", cardQuery,
 		)
 		logging.LogError(logger, err, "Card lookup failed")
 		metrics.RecordCommand(false)
@@ -149,7 +149,7 @@ func (b *Bot) messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 
 		// Provide different error messages based on error type.
 		if errors.IsErrorType(err, errors.ErrorTypeNotFound) {
-			b.sendErrorMessage(s, m.ChannelID, fmt.Sprintf("Sorry, I couldn't find a card named '%s'. Try using different keywords or check the spelling.", cardName))
+			b.sendErrorMessage(s, m.ChannelID, fmt.Sprintf("Sorry, I couldn't find a card matching '%s'. Try using different keywords or check the spelling.", cardQuery))
 		} else {
 			b.sendErrorMessage(s, m.ChannelID, "Sorry, something went wrong while searching for that card.")
 		}
@@ -176,32 +176,66 @@ func (b *Bot) handleRandomCard(s *discordgo.Session, m *discordgo.MessageCreate,
 	return b.sendCardMessage(s, m.ChannelID, card)
 }
 
-// handleCardLookup handles card name lookup with caching.
-func (b *Bot) handleCardLookup(s *discordgo.Session, m *discordgo.MessageCreate, cardName string) error {
-	if cardName == "" {
-		return errors.NewValidationError("card name cannot be empty")
+// handleCardLookup handles card lookup with support for filtering parameters.
+func (b *Bot) handleCardLookup(s *discordgo.Session, m *discordgo.MessageCreate, cardQuery string) error {
+	if cardQuery == "" {
+		return errors.NewValidationError("card query cannot be empty")
 	}
 
 	logger := logging.WithComponent("discord").With(
 		"user_id", m.Author.ID,
 		"username", m.Author.Username,
-		"card_name", cardName,
+		"card_query", cardQuery,
 	)
 	logger.Info("Looking up card")
 
-	// Try to get from cache first, then fetch from API if not found.
-	card, err := b.cache.GetOrSet(cardName, func(name string) (*scryfall.Card, error) {
-		return b.scryfallClient.GetCardByName(name)
-	})
+	// Check if query contains filter parameters
+	hasFilters := b.hasFilterParameters(cardQuery)
+
+	var (
+		card *scryfall.Card
+		err  error
+	)
+
+	if hasFilters {
+		// Use search endpoint for filtered queries
+		logger.Debug("Using search endpoint for filtered query")
+
+		card, err = b.scryfallClient.SearchCardFirst(cardQuery)
+	} else {
+		// Try to get from cache first for simple name lookups, then fetch from API if not found.
+		card, err = b.cache.GetOrSet(cardQuery, func(name string) (*scryfall.Card, error) {
+			return b.scryfallClient.GetCardByName(name)
+		})
+	}
+
 	if err != nil {
 		return errors.NewAPIError("failed to fetch card", err)
 	}
 
-	// Update cache metrics.
-	cacheStats := b.cache.Stats()
-	metrics.Get().UpdateCacheStats(cacheStats.Hits, cacheStats.Misses, int64(cacheStats.Size))
+	// Update cache metrics only for cached lookups
+	if !hasFilters {
+		cacheStats := b.cache.Stats()
+		metrics.Get().UpdateCacheStats(cacheStats.Hits, cacheStats.Misses, int64(cacheStats.Size))
+	}
 
 	return b.sendCardMessage(s, m.ChannelID, card)
+}
+
+// hasFilterParameters checks if the query contains Scryfall filter syntax.
+func (b *Bot) hasFilterParameters(query string) bool {
+	filterPrefixes := []string{
+		"frame:", "border:", "is:", "e:", "set:", "new:", "not:", "year:", "rarity:", "c:", "cmc:", "pow:", "tou:", "t:", "o:", "a:", "flavor:", "lore:", "function:", "unique:", "artist:", "watermark:", "stamp:", "foil", "nonfoil", "etched", "glossy", "textless", "fullart", "borderless", "colorshifted", "tombstone", "legendary", "reprint", "promo", "funny", "timeshifted",
+	}
+
+	lowerQuery := strings.ToLower(query)
+	for _, prefix := range filterPrefixes {
+		if strings.Contains(lowerQuery, prefix) {
+			return true
+		}
+	}
+
+	return false
 }
 
 // sendCardMessage sends a card image and details to a Discord channel.
@@ -329,38 +363,34 @@ func (b *Bot) handleHelp(s *discordgo.Session, m *discordgo.MessageCreate, _ []s
 
 	embed := &discordgo.MessageEmbed{
 		Title:       "MTG Card Bot Help",
-		Description: "I can help you look up Magic: The Gathering cards!",
+		Description: "I can help you look up Magic: The Gathering cards with advanced filtering!",
 		Color:       0x3498DB, // Blue color.
 		Fields: []*discordgo.MessageEmbedField{
 			{
-				Name:   fmt.Sprintf("%s<card-name>", b.config.CommandPrefix),
-				Value:  "Look up a card by name (supports fuzzy matching)",
-				Inline: false,
-			},
-			{
-				Name:   fmt.Sprintf("%srandom", b.config.CommandPrefix),
-				Value:  "Get a random Magic: The Gathering card",
-				Inline: false,
-			},
-			{
-				Name:   fmt.Sprintf("%shelp", b.config.CommandPrefix),
-				Value:  "Show this help message",
-				Inline: false,
-			},
-			{
-				Name:   fmt.Sprintf("%sstats", b.config.CommandPrefix),
-				Value:  "Show bot performance statistics",
-				Inline: false,
-			},
-			{
-				Name: "Examples",
-				Value: fmt.Sprintf("`%slightning bolt` • `%sthe-one-ring` • `%sjac bele` • `%srandom`",
+				Name: "Basic Commands",
+				Value: fmt.Sprintf("`%s<card-name>` - Look up a card by name\n`%srandom` - Get a random card\n`%shelp` - Show this help\n`%sstats` - Show bot statistics",
 					b.config.CommandPrefix, b.config.CommandPrefix, b.config.CommandPrefix, b.config.CommandPrefix),
+				Inline: false,
+			},
+			{
+				Name: "Advanced Filtering",
+				Value: fmt.Sprintf("Use filters to find specific versions:\n`%sthe one ring frame:2015` - 2015 frame style\n`%slightning bolt border:borderless` - Borderless version\n`%sbrainstorm is:foil e:stx` - Foil from Strixhaven",
+					b.config.CommandPrefix, b.config.CommandPrefix, b.config.CommandPrefix),
+				Inline: false,
+			},
+			{
+				Name:   "Filter Types",
+				Value:  "**Frame:** `frame:2015`, `frame:1997`, `frame:future`\n**Border:** `border:borderless`, `border:white`, `border:black`\n**Finish:** `is:foil`, `is:nonfoil`, `is:etched`\n**Set:** `e:m21`, `set:\"dominaria united\"`\n**Art:** `is:fullart`, `new:art`",
+				Inline: false,
+			},
+			{
+				Name:   "📖 Full Command Reference",
+				Value:  "[Complete Command Cheat Sheet](https://github.com/dunamismax/mtg-card-bot/blob/main/docs/commands.md)",
 				Inline: false,
 			},
 		},
 		Footer: &discordgo.MessageEmbedFooter{
-			Text: "💡 Tip: Fuzzy matching works! Try partial names like 'jac bele' for 'Jace Beleren'",
+			Text: "💡 Tip: Fuzzy matching works! Mix card names with filters for precise results.",
 		},
 	}
 
