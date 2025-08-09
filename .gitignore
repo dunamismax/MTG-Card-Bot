@@ -40,3 +40,18 @@ go.work.sum
 # Logs
 *.log
 logs/
+
+# OS Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# Temporary files
+*~
+.tmp
+tmp/
