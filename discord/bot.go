@@ -193,8 +193,9 @@ func (b *Bot) handleCardLookup(s *discordgo.Session, m *discordgo.MessageCreate,
 	hasFilters := b.hasFilterParameters(cardQuery)
 
 	var (
-		card *scryfall.Card
-		err  error
+		card         *scryfall.Card
+		err          error
+		usedFallback bool
 	)
 
 	if hasFilters {
@@ -213,6 +214,8 @@ func (b *Bot) handleCardLookup(s *discordgo.Session, m *discordgo.MessageCreate,
 					return b.scryfallClient.GetCardByName(name)
 				})
 				if err == nil {
+					usedFallback = true
+
 					logger.Info("Fallback search successful", "original_query", cardQuery, "fallback_name", cardName)
 					// Update cache metrics for the fallback lookup
 					cacheStats := b.cache.Stats()
@@ -236,9 +239,6 @@ func (b *Bot) handleCardLookup(s *discordgo.Session, m *discordgo.MessageCreate,
 		cacheStats := b.cache.Stats()
 		metrics.Get().UpdateCacheStats(cacheStats.Hits, cacheStats.Misses, int64(cacheStats.Size))
 	}
-
-	// Check if this was a fallback search
-	usedFallback := hasFilters && err == nil && b.extractCardName(cardQuery) != cardQuery
 
 	return b.sendCardMessage(s, m.ChannelID, card, usedFallback, cardQuery)
 }
