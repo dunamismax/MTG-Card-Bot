@@ -147,10 +147,17 @@ func (b *Bot) messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 		metrics.RecordCommand(false)
 		metrics.RecordError(err)
 
-		// Provide different error messages based on error type.
-		if errors.IsErrorType(err, errors.ErrorTypeNotFound) {
-			b.sendErrorMessage(s, m.ChannelID, fmt.Sprintf("Sorry, I couldn't find a card matching '%s'. Try using different keywords or check the spelling.", cardQuery))
-		} else {
+		// Provide more helpful error messages based on error type
+		switch {
+		case errors.IsErrorType(err, errors.ErrorTypeNotFound):
+			if b.hasFilterParameters(cardQuery) {
+				b.sendErrorMessage(s, m.ChannelID, fmt.Sprintf("No cards found for '%s'. Try simpler filters like `e:set` or `is:foil`, or check the spelling.", cardQuery))
+			} else {
+				b.sendErrorMessage(s, m.ChannelID, fmt.Sprintf("Card '%s' not found. Try partial names like 'bolt' for 'Lightning Bolt'.", cardQuery))
+			}
+		case errors.IsErrorType(err, errors.ErrorTypeRateLimit):
+			b.sendErrorMessage(s, m.ChannelID, "API rate limit exceeded. Please try again in a moment.")
+		default:
 			b.sendErrorMessage(s, m.ChannelID, "Sorry, something went wrong while searching for that card.")
 		}
 	} else {
@@ -243,15 +250,16 @@ func (b *Bot) handleCardLookup(s *discordgo.Session, m *discordgo.MessageCreate,
 	return b.sendCardMessage(s, m.ChannelID, card, usedFallback, cardQuery)
 }
 
-// hasFilterParameters checks if the query contains Scryfall filter syntax.
+// hasFilterParameters checks if the query contains essential Scryfall filter syntax.
 func (b *Bot) hasFilterParameters(query string) bool {
-	filterPrefixes := []string{
-		"frame:", "border:", "is:", "e:", "set:", "new:", "not:", "year:", "rarity:", "c:", "cmc:", "pow:", "tou:", "t:", "o:", "a:", "flavor:", "lore:", "function:", "unique:", "artist:", "watermark:", "stamp:", "foil", "nonfoil", "etched", "glossy", "textless", "fullart", "borderless", "colorshifted", "tombstone", "legendary", "reprint", "promo", "funny", "timeshifted",
+	// Simplified essential filters - most commonly used and reliable
+	essentialFilters := []string{
+		"e:", "set:", "frame:", "border:", "is:foil", "is:nonfoil", "is:fullart", "is:textless", "is:borderless", "rarity:",
 	}
 
 	lowerQuery := strings.ToLower(query)
-	for _, prefix := range filterPrefixes {
-		if strings.Contains(lowerQuery, prefix) {
+	for _, filter := range essentialFilters {
+		if strings.Contains(lowerQuery, filter) {
 			return true
 		}
 	}
@@ -269,16 +277,16 @@ func (b *Bot) extractCardName(query string) string {
 	for _, word := range words {
 		lowerWord := strings.ToLower(word)
 
-		// Skip known filter patterns
+		// Skip known filter patterns with colons
 		if strings.Contains(lowerWord, ":") {
 			continue
 		}
 
-		// Skip standalone filter keywords that don't use colons
-		filterKeywords := []string{"foil", "nonfoil", "etched", "glossy", "textless", "fullart", "borderless", "colorshifted", "tombstone", "legendary", "reprint", "promo", "funny", "timeshifted"}
+		// Skip essential standalone filter keywords only
+		essentialKeywords := []string{"foil", "nonfoil", "fullart", "textless", "borderless"}
 		isFilterKeyword := false
 
-		for _, keyword := range filterKeywords {
+		for _, keyword := range essentialKeywords {
 			if lowerWord == keyword {
 				isFilterKeyword = true
 				break
@@ -448,8 +456,8 @@ func (b *Bot) handleHelp(s *discordgo.Session, m *discordgo.MessageCreate, _ []s
 				Inline: false,
 			},
 			{
-				Name:   "Filter Types",
-				Value:  "**Frame:** `frame:2015`, `frame:1997`, `frame:future`, `frame:1993`\n**Border:** `border:borderless`, `border:white`, `border:black`, `border:gold`\n**Finish:** `is:foil`, `is:nonfoil`, `is:etched`, `is:glossy`\n**Set:** `e:ltr`, `e:sta`, `e:vma`, `set:\"lord of the rings\"`\n**Art:** `is:fullart`, `new:art`, `is:showcase`, `is:textless`\n**Rarity:** `is:mythic`, `is:rare`, `is:uncommon`, `is:vintage`",
+				Name:   "Essential Filters",
+				Value:  "**Set:** `e:ltr`, `e:sta`, `e:dom` (3-letter set codes)\n**Frame:** `frame:2015`, `frame:1997`, `frame:1993`\n**Border:** `border:borderless`, `border:white`, `border:black`\n**Finish:** `is:foil`, `is:nonfoil`\n**Art:** `is:fullart`, `is:textless`, `is:borderless`\n**Rarity:** `rarity:mythic`, `rarity:rare`, `rarity:uncommon`",
 				Inline: false,
 			},
 			{

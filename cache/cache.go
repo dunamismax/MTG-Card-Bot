@@ -48,11 +48,17 @@ func NewCardCache(ttl time.Duration, maxSize int) *CardCache {
 	return cache
 }
 
-// normalizeKey normalizes card names for consistent cache keys.
+// normalizeKey normalizes card names for consistent cache keys with better fuzzy matching.
 func normalizeKey(cardName string) string {
-	// Convert to lowercase and remove extra spaces.
+	// Convert to lowercase and remove extra spaces
 	normalized := strings.ToLower(strings.TrimSpace(cardName))
-	// Replace multiple spaces with single space.
+	// Replace multiple spaces with single space
+	normalized = strings.Join(strings.Fields(normalized), " ")
+	// Remove common punctuation that might cause cache misses
+	normalized = strings.ReplaceAll(normalized, ",", "")
+	normalized = strings.ReplaceAll(normalized, "'", "")
+	normalized = strings.ReplaceAll(normalized, "-", " ")
+	// Final cleanup of spaces
 	normalized = strings.Join(strings.Fields(normalized), " ")
 
 	return normalized

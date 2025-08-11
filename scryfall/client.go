@@ -18,9 +18,9 @@ const (
 	// BaseURL is the base URL for the Scryfall API.
 	BaseURL = "https://api.scryfall.com"
 	// UserAgent is the User-Agent header for API requests.
-	UserAgent = "MTGDiscordBot/1.0"
+	UserAgent = "MTGCardBot/2.0"
 	// RateLimit defines the rate limit for API requests (10 requests per second as recommended).
-	RateLimit = 100 * time.Millisecond
+	RateLimit = 50 * time.Millisecond
 )
 
 // Client represents a Scryfall API client with rate limiting.

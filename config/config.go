@@ -36,8 +36,8 @@ func Load() (*Config, error) {
 		RequestTimeout:  30 * time.Second, // default request timeout.
 		MaxRetries:      3,                // default max retries.
 		DebugMode:       false,            // default debug mode.
-		CacheTTL:        15 * time.Minute, // default cache TTL.
-		CacheSize:       500,              // default cache size.
+		CacheTTL:        1 * time.Hour,    // increased cache TTL for better performance.
+		CacheSize:       1000,             // increased cache size for better hit rate.
 	}
 
 	// Discord token is required.
