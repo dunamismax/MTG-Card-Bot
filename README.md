@@ -160,6 +160,12 @@ Additional docs:
 </p>
 
 <p align="center">
+  <img src="https://github.com/dunamismax/images/blob/main/golang/discord-bots/multi-card-grid.png" alt="Multi-Card Grid" width="500" />
+  <br>
+  <em>Multi-card grid response with clickable card links above the images</em>
+</p>
+
+<p align="center">
   <img src="https://github.com/dunamismax/images/blob/main/golang/discord-bots/mtg-card-bot-stats-new.png" alt="Stats Command Screenshot" width="500" />
   <br>
   <em>Performance statistics and monitoring</em>
