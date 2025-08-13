@@ -364,7 +364,8 @@ func (b *Bot) sendCardGridMessage(s *discordgo.Session, channelID string, items 
         }
         // Add a line with a link to the Scryfall page.
         if it.card.ScryfallURI != "" {
-            lines = append(lines, fmt.Sprintf("%s: %s", label, it.card.ScryfallURI))
+            // Wrap URL in <> to prevent Discord from auto-embedding the link preview.
+            lines = append(lines, fmt.Sprintf("%s: <%s>", label, it.card.ScryfallURI))
         } else {
             lines = append(lines, label)
         }
