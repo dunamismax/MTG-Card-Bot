@@ -134,7 +134,7 @@ mage vulncheck     # Security check
 
 Additional docs:
 
-- [Old-School Art Guide](docs/old-school-art.md) – Frames, borders, and vintage aesthetics for iconic looks.
+* [Old-School Art Guide](docs/old-school-art.md) – Frames, borders, and vintage aesthetics for iconic looks.
 
 ### Examples of fuzzy matching
 
@@ -166,13 +166,13 @@ Additional docs:
 </p>
 
 <p align="center">
-  <img src="https://github.com/dunamismax/images/blob/main/golang/discord-bots/mtg-card-bot-stats-new.png" alt="Stats Command Screenshot" width="500" />
+  <img src="https://github.com/dunamismax/images/blob/main/golang/discord-bots/stats-new.png" alt="Stats Command Screenshot" width="500" />
   <br>
   <em>Performance statistics and monitoring</em>
 </p>
 
 <p align="center">
-  <img src="https://github.com/dunamismax/images/blob/main/golang/discord-bots/mtg-card-bot-help-new.png" alt="Help Command Screenshot" width="500" />
+  <img src="https://github.com/dunamismax/images/blob/main/golang/discord-bots/help-new.png" alt="Help Command Screenshot" width="500" />
   <br>
   <em>Help command showing all available features</em>
 </p>
