@@ -351,6 +351,7 @@ func (b *Bot) sendCardGridMessage(s *discordgo.Session, channelID string, items 
 
     var files []*discordgo.File
     var lines []string
+    var mdLines []string
     for _, it := range items {
         if it.err != nil || it.card == nil || !it.card.IsValidCard() {
             lines = append(lines, fmt.Sprintf("%s: not found", it.query))
@@ -362,12 +363,15 @@ func (b *Bot) sendCardGridMessage(s *discordgo.Session, channelID string, items 
         if it.usedFallback {
             label += " (closest match)"
         }
-        // Add a line with a link to the Scryfall page.
+        // Prepare human-friendly link lines
         if it.card.ScryfallURI != "" {
-            // Wrap URL in <> to prevent Discord from auto-embedding the link preview.
-            lines = append(lines, fmt.Sprintf("%s: <%s>", label, it.card.ScryfallURI))
+            // Text form (kept for fallback/plain messages)
+            lines = append(lines, fmt.Sprintf("%s: %s", label, it.card.ScryfallURI))
+            // Embed-friendly masked link
+            mdLines = append(mdLines, fmt.Sprintf("- [%s](%s)", label, it.card.ScryfallURI))
         } else {
             lines = append(lines, label)
+            mdLines = append(mdLines, fmt.Sprintf("- %s", label))
         }
 
         // Fetch image if available.
@@ -385,20 +389,25 @@ func (b *Bot) sendCardGridMessage(s *discordgo.Session, channelID string, items 
         }
     }
 
+    // Always send a compact embed with masked links for a clean look.
+    embed := &discordgo.MessageEmbed{
+        Title:       "Requested Cards",
+        Description: strings.Join(mdLines, "\n"),
+        Color:       0x5865F2,
+    }
+
+    // If no images, send just the embed; otherwise include grid attachments.
     if len(files) == 0 {
-        // Fallback: no images; send a combined embed with names/links.
-        content := "Requested cards:\n" + strings.Join(lines, "\n")
-        _, err := s.ChannelMessageSend(channelID, content)
+        _, err := s.ChannelMessageSendEmbed(channelID, embed)
         if err != nil {
-            return errors.NewDiscordError("failed to send multi-card text message", err)
+            return errors.NewDiscordError("failed to send multi-card embed message", err)
         }
         return nil
     }
 
-    content := "Requested cards:\n" + strings.Join(lines, "\n")
     _, err := s.ChannelMessageSendComplex(channelID, &discordgo.MessageSend{
-        Content: content,
-        Files:   files,
+        Embeds: []*discordgo.MessageEmbed{embed},
+        Files:  files,
     })
     if err != nil {
         return errors.NewDiscordError("failed to send multi-card grid message", err)
@@ -658,38 +667,27 @@ func (b *Bot) handleHelp(s *discordgo.Session, m *discordgo.MessageCreate, _ []s
 	logger.Info("Showing help information")
 
     embed := &discordgo.MessageEmbed{
-        Title:       "MTG Card Bot Help",
-        Description: "Magic: The Gathering card lookup with advanced filtering support",
+        Title:       "MTG Card Bot — Help",
+        Description: "Essentials only. Type card names or use a grid.",
         Color:       0x3498DB,
         Fields: []*discordgo.MessageEmbedField{
             {
-                Name: "Basic Commands",
-                Value: fmt.Sprintf("`%s<card-name>` - Look up any MTG card\n`%s<card1>; <card2>; ...` - Lookup multiple cards in a grid (up to 10)\n`%srandom` - Get a random card\n`%shelp` - Show this help menu\n`%sstats` - Display bot statistics\n`%scache` - Show cache performance",
-                    b.config.CommandPrefix, b.config.CommandPrefix, b.config.CommandPrefix, b.config.CommandPrefix, b.config.CommandPrefix, b.config.CommandPrefix),
-                Inline: false,
-            },
-            {
-                Name: "Search Examples",
-                Value: fmt.Sprintf("`%slightning bolt` - Find Lightning Bolt\n`%sthe one ring` - Find The One Ring\n`%sjac bele` - Fuzzy search finds \"Jace Beleren\"\n`%sbol` - Partial name finds \"Lightning Bolt\"\n`%sblack lotus; lightning bolt; the one ring` - 3-card grid",
+                Name:  "Top Commands",
+                Value: fmt.Sprintf("`%s<card>` – Look up a card\n`%s<card1>; <card2>; ...` – Grid lookup (up to 10)\n`%srandom` – Random card\n`%sstats` – Bot statistics\n`%shelp` – This menu",
                     b.config.CommandPrefix, b.config.CommandPrefix, b.config.CommandPrefix, b.config.CommandPrefix, b.config.CommandPrefix),
                 Inline: false,
             },
-			{
-				Name: "Advanced Filtering",
-				Value: fmt.Sprintf("`%sthe one ring e:ltr border:borderless` - Specific version\n`%slightning bolt frame:1993` - Original 1993 frame\n`%sblack lotus is:foil` - Foil version only\n`%smox ruby rarity:rare e:vma` - Rare from Vintage Masters",
-					b.config.CommandPrefix, b.config.CommandPrefix, b.config.CommandPrefix, b.config.CommandPrefix),
-				Inline: false,
-			},
-			{
-				Name:   "Essential Filters",
-				Value:  "**Set:** `e:ltr` `e:sta` `e:dom` (3-letter codes)\n**Frame:** `frame:2015` `frame:1997` `frame:1993`\n**Border:** `border:borderless` `border:white`\n**Finish:** `is:foil` `is:nonfoil`\n**Art:** `is:fullart` `is:textless` `is:borderless`\n**Rarity:** `rarity:mythic` `rarity:rare` `rarity:uncommon`",
-				Inline: false,
-			},
-		},
-		Footer: &discordgo.MessageEmbedFooter{
-			Text: "Fuzzy matching supported - Mix card names with filters for precise results",
-		},
-	}
+            {
+                Name:  "Examples",
+                Value: fmt.Sprintf("`%slightning bolt`\n`%sblack lotus; the one ring; mox ruby`",
+                    b.config.CommandPrefix, b.config.CommandPrefix),
+                Inline: false,
+            },
+        },
+        Footer: &discordgo.MessageEmbedFooter{
+            Text: "Tip: Partial names and fuzzy matching are supported.",
+        },
+    }
 
 	_, err := s.ChannelMessageSendEmbed(m.ChannelID, embed)
 	if err != nil {
@@ -714,49 +712,40 @@ func (b *Bot) handleStats(s *discordgo.Session, m *discordgo.MessageCreate, _ []
 	// Format uptime nicely.
 	uptimeStr := formatDuration(uptime)
 
-	embed := &discordgo.MessageEmbed{
-		Title: "Bot Statistics",
-		Color: 0x2ECC71, // Green color.
-		Fields: []*discordgo.MessageEmbedField{
-			{
-				Name: "Commands",
-				Value: fmt.Sprintf("Total: %d\nSuccessful: %d\nFailed: %d\nSuccess Rate: %.1f%%",
-					summary.CommandsTotal, summary.CommandsSuccessful, summary.CommandsFailed, summary.CommandSuccessRate),
-				Inline: true,
-			},
-			{
-				Name: "API Requests",
-				Value: fmt.Sprintf("Total: %d\nSuccess Rate: %.1f%%\nAvg Response: %.0fms",
-					summary.APIRequestsTotal, summary.APISuccessRate, summary.AverageResponseTime),
-				Inline: true,
-			},
-			{
-				Name: "Cache Performance",
-				Value: fmt.Sprintf("Size: %d cards\nHit Rate: %.1f%%\nHits: %d\nMisses: %d",
-					summary.CacheSize, summary.CacheHitRate, summary.CacheHits, summary.CacheMisses),
-				Inline: true,
-			},
-			{
-				Name: "Performance",
-				Value: fmt.Sprintf("Commands/sec: %.2f\nAPI Requests/sec: %.2f",
-					summary.CommandsPerSecond, summary.APIRequestsPerSecond),
-				Inline: true,
-			},
-			{
-				Name:   "Uptime",
-				Value:  uptimeStr,
-				Inline: true,
-			},
-			{
-				Name:   "Started",
-				Value:  fmt.Sprintf("<t:%d:R>", time.Now().Add(-uptime).Unix()),
-				Inline: true,
-			},
-		},
-		Footer: &discordgo.MessageEmbedFooter{
-			Text: "Statistics since bot startup",
-		},
-	}
+    embed := &discordgo.MessageEmbed{
+        Title:       "Bot Stats",
+        Description: fmt.Sprintf("Uptime: %s • Started: <t:%d:R>", uptimeStr, time.Now().Add(-uptime).Unix()),
+        Color:       0x2ECC71,
+        Fields: []*discordgo.MessageEmbedField{
+            {
+                Name:  "Commands",
+                Value: fmt.Sprintf("Total: %d • Success: %.1f%% (%d/%d)",
+                    summary.CommandsTotal, summary.CommandSuccessRate, summary.CommandsSuccessful, summary.CommandsTotal),
+                Inline: false,
+            },
+            {
+                Name:  "API",
+                Value: fmt.Sprintf("Total: %d • Success: %.1f%% • Avg: %.0fms",
+                    summary.APIRequestsTotal, summary.APISuccessRate, summary.AverageResponseTime),
+                Inline: false,
+            },
+            {
+                Name:  "Cache",
+                Value: fmt.Sprintf("Size: %d • Hit Rate: %.1f%% (%d/%d)",
+                    summary.CacheSize, summary.CacheHitRate, summary.CacheHits, summary.CacheHits+summary.CacheMisses),
+                Inline: false,
+            },
+            {
+                Name:  "Throughput",
+                Value: fmt.Sprintf("Cmds/s: %.2f • API/s: %.2f",
+                    summary.CommandsPerSecond, summary.APIRequestsPerSecond),
+                Inline: false,
+            },
+        },
+        Footer: &discordgo.MessageEmbedFooter{
+            Text: "Live metrics since process start",
+        },
+    }
 
 	// Add error information if there are errors.
 	if len(summary.ErrorsByType) > 0 {
