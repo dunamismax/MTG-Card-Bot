@@ -396,23 +396,25 @@ func (b *Bot) sendCardGridMessage(s *discordgo.Session, channelID string, items 
 		Color:       0x5865F2,
 	}
 
-	// If no images, send just the embed; otherwise include grid attachments.
-	if len(files) == 0 {
-		_, err := s.ChannelMessageSendEmbed(channelID, embed)
-		if err != nil {
-			return errors.NewDiscordError("failed to send multi-card embed message", err)
-		}
-		return nil
-	}
+    // If no images, send just the embed; otherwise send embed first, then images
+    if len(files) == 0 {
+        _, err := s.ChannelMessageSendEmbed(channelID, embed)
+        if err != nil {
+            return errors.NewDiscordError("failed to send multi-card embed message", err)
+        }
+        return nil
+    }
 
-	_, err := s.ChannelMessageSendComplex(channelID, &discordgo.MessageSend{
-		Embeds: []*discordgo.MessageEmbed{embed},
-		Files:  files,
-	})
-	if err != nil {
-		return errors.NewDiscordError("failed to send multi-card grid message", err)
-	}
-	return nil
+    // Send the list embed first so it appears above the image grid
+    if _, err := s.ChannelMessageSendEmbed(channelID, embed); err != nil {
+        return errors.NewDiscordError("failed to send multi-card list embed", err)
+    }
+
+    // Then send the image grid as a separate message with only attachments
+    if _, err := s.ChannelMessageSendComplex(channelID, &discordgo.MessageSend{Files: files}); err != nil {
+        return errors.NewDiscordError("failed to send multi-card grid attachments", err)
+    }
+    return nil
 }
 
 // fetchImage downloads the image data, returning bytes and a reasonable filename.
