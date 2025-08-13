@@ -667,25 +667,35 @@ func (b *Bot) handleHelp(s *discordgo.Session, m *discordgo.MessageCreate, _ []s
 	logger.Info("Showing help information")
 
     embed := &discordgo.MessageEmbed{
-        Title:       "MTG Card Bot — Help",
-        Description: "Essentials only. Type card names or use a grid.",
+        Title:       "MTG Card Bot Help",
+        Description: "Look up cards, build grids, and filter versions.",
         Color:       0x3498DB,
         Fields: []*discordgo.MessageEmbedField{
             {
-                Name:  "Top Commands",
-                Value: fmt.Sprintf("`%s<card>` – Look up a card\n`%s<card1>; <card2>; ...` – Grid lookup (up to 10)\n`%srandom` – Random card\n`%sstats` – Bot statistics\n`%shelp` – This menu",
-                    b.config.CommandPrefix, b.config.CommandPrefix, b.config.CommandPrefix, b.config.CommandPrefix, b.config.CommandPrefix),
+                Name:  "Commands",
+                Value: fmt.Sprintf("`%s<card>` – Look up a card\n`%s<card1>; <card2>; ...` – Grid lookup (up to 10)\n`%srandom` – Random card\n`%sstats` – Bot statistics\n`%scache` – Cache stats\n`%shelp` – This menu",
+                    b.config.CommandPrefix, b.config.CommandPrefix, b.config.CommandPrefix, b.config.CommandPrefix, b.config.CommandPrefix, b.config.CommandPrefix),
                 Inline: false,
             },
             {
-                Name:  "Examples",
-                Value: fmt.Sprintf("`%slightning bolt`\n`%sblack lotus; the one ring; mox ruby`",
-                    b.config.CommandPrefix, b.config.CommandPrefix),
+                Name:  "Examples (Cool Looks)",
+                Value: fmt.Sprintf(
+                    "`%sthe one ring e:ltr is:foil border:borderless` – Borderless foil\n"+
+                        "`%ssol ring is:textless` – Textless art\n"+
+                        "`%slightning bolt is:fullart` – Full art\n"+
+                        "`%sblack lotus frame:1993; mox emerald frame:1993; mox ruby frame:1993` – Vintage frames",
+                    b.config.CommandPrefix, b.config.CommandPrefix, b.config.CommandPrefix, b.config.CommandPrefix,
+                ),
+                Inline: false,
+            },
+            {
+                Name:  "Filters",
+                Value: "Set `e:ltr` • Frame `frame:1993|2015` • Border `border:borderless` • Finish `is:foil|is:nonfoil|is:etched` • Art `is:fullart|is:textless|is:borderless` • Rarity `rarity:mythic|rare`",
                 Inline: false,
             },
         },
         Footer: &discordgo.MessageEmbedFooter{
-            Text: "Tip: Partial names and fuzzy matching are supported.",
+            Text: "Fuzzy and partial name matching supported.",
         },
     }
 
