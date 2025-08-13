@@ -89,6 +89,15 @@ mage vulncheck     # Security check
 !cache                # Show detailed cache statistics
 ```
 
+### Multi-Card Lookup (Grid)
+
+```bash
+# Look up multiple cards at once (semicolon-separated)
+!black lotus; lightning bolt; the one ring; sol ring
+
+# Up to 10 per request; sent in grids of 4
+```
+
 ### Advanced Filtering
 
 ```bash

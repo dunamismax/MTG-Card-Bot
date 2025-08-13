@@ -72,13 +72,14 @@ func main() {
 }
 
 func printUsageInstructions(prefix string) {
-	logger := logging.WithComponent("usage")
-	logger.Info("MTG Card Bot Ready")
-	logger.Info("Card lookup", "example", prefix+"<card-name>")
-	logger.Info("Basic commands", "random", prefix+"random", "help", prefix+"help", "stats", prefix+"stats")
-	logger.Info("Fuzzy matching enabled")
-	logger.Info("Example queries", "partial", prefix+"bolt", "fuzzy", prefix+"jac bele", "filtered", prefix+"bolt frame:1993")
-	logger.Info("Bot ready for Discord commands")
+    logger := logging.WithComponent("usage")
+    logger.Info("MTG Card Bot Ready")
+    logger.Info("Card lookup", "example", prefix+"<card-name>")
+    logger.Info("Multi-card lookup", "example", prefix+"black lotus; lightning bolt; the one ring")
+    logger.Info("Basic commands", "random", prefix+"random", "help", prefix+"help", "stats", prefix+"stats")
+    logger.Info("Fuzzy matching enabled")
+    logger.Info("Example queries", "partial", prefix+"bolt", "fuzzy", prefix+"jac bele", "filtered", prefix+"bolt frame:1993")
+    logger.Info("Bot ready for Discord commands")
 }
 
 // gracefulShutdown handles graceful shutdown with timeout.

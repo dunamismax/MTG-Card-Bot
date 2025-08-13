@@ -2,19 +2,25 @@
 package discord
 
 import (
-	"fmt"
-	"strings"
-	"time"
+    "bytes"
+    "context"
+    "fmt"
+    "io"
+    "net/http"
+    "path/filepath"
+    "regexp"
+    "strings"
+    "time"
 
-	"github.com/bwmarrin/discordgo"
-	"github.com/dunamismax/MTG-Card-Bot/cache"
-	"github.com/dunamismax/MTG-Card-Bot/config"
-	"github.com/dunamismax/MTG-Card-Bot/errors"
-	"github.com/dunamismax/MTG-Card-Bot/logging"
-	"github.com/dunamismax/MTG-Card-Bot/metrics"
-	"github.com/dunamismax/MTG-Card-Bot/scryfall"
-	"golang.org/x/text/cases"
-	"golang.org/x/text/language"
+    "github.com/bwmarrin/discordgo"
+    "github.com/dunamismax/MTG-Card-Bot/cache"
+    "github.com/dunamismax/MTG-Card-Bot/config"
+    "github.com/dunamismax/MTG-Card-Bot/errors"
+    "github.com/dunamismax/MTG-Card-Bot/logging"
+    "github.com/dunamismax/MTG-Card-Bot/metrics"
+    "github.com/dunamismax/MTG-Card-Bot/scryfall"
+    "golang.org/x/text/cases"
+    "golang.org/x/text/language"
 )
 
 // Bot represents a Discord bot instance with all necessary components.
@@ -28,6 +34,14 @@ type Bot struct {
 
 // CommandHandler represents a function that handles Discord bot commands.
 type CommandHandler func(s *discordgo.Session, m *discordgo.MessageCreate, args []string) error
+
+// multiResolved represents a resolved card query used for multi-card responses.
+type multiResolved struct {
+    query        string
+    card         *scryfall.Card
+    usedFallback bool
+    err          error
+}
 
 // NewBot creates a new Discord bot instance.
 func NewBot(cfg *config.Config, scryfallClient *scryfall.Client, cardCache *cache.CardCache) (*Bot, error) {
@@ -104,10 +118,29 @@ func (b *Bot) messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 		return
 	}
 
-	// Remove prefix and split into command and args.
-	content := strings.TrimPrefix(m.Content, b.config.CommandPrefix)
+    // Remove prefix
+    content := strings.TrimPrefix(m.Content, b.config.CommandPrefix)
 
-	parts := strings.Fields(content)
+    // If the content contains semicolons, treat as multi-card lookup.
+    if strings.Contains(content, ";") {
+        if err := b.handleMultiCardLookup(s, m, content); err != nil {
+            logger := logging.WithComponent("discord").With(
+                "user_id", m.Author.ID,
+                "username", m.Author.Username,
+                "raw_query", content,
+            )
+            logging.LogError(logger, err, "Multi-card lookup failed")
+            metrics.RecordCommand(false)
+            metrics.RecordError(err)
+            b.sendErrorMessage(s, m.ChannelID, "Sorry, something went wrong processing your multi-card query.")
+        } else {
+            metrics.RecordCommand(true)
+            logging.LogDiscordCommand(m.Author.ID, m.Author.Username, "multi_card_lookup", true)
+        }
+        return
+    }
+
+    parts := strings.Fields(content)
 	if len(parts) == 0 {
 		return
 	}
@@ -135,9 +168,9 @@ func (b *Bot) messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 		return
 	}
 
-	// If no specific handler, treat it as a card lookup.
-	cardQuery := strings.Join(parts, " ")
-	if err := b.handleCardLookup(s, m, cardQuery); err != nil {
+    // If no specific handler, treat it as a card lookup.
+    cardQuery := strings.Join(parts, " ")
+    if err := b.handleCardLookup(s, m, cardQuery); err != nil {
 		logger := logging.WithComponent("discord").With(
 			"user_id", m.Author.ID,
 			"username", m.Author.Username,
@@ -185,70 +218,254 @@ func (b *Bot) handleRandomCard(s *discordgo.Session, m *discordgo.MessageCreate,
 
 // handleCardLookup handles card lookup with support for filtering parameters.
 func (b *Bot) handleCardLookup(s *discordgo.Session, m *discordgo.MessageCreate, cardQuery string) error {
-	if cardQuery == "" {
-		return errors.NewValidationError("card query cannot be empty")
-	}
+    if cardQuery == "" {
+        return errors.NewValidationError("card query cannot be empty")
+    }
 
-	logger := logging.WithComponent("discord").With(
-		"user_id", m.Author.ID,
-		"username", m.Author.Username,
-		"card_query", cardQuery,
-	)
-	logger.Info("Looking up card")
+    logger := logging.WithComponent("discord").With(
+        "user_id", m.Author.ID,
+        "username", m.Author.Username,
+        "card_query", cardQuery,
+    )
+    logger.Info("Looking up card")
 
-	// Normalize and check if query contains filter parameters
-	cardQuery = strings.TrimSpace(cardQuery)
-	hasFilters := b.hasFilterParameters(cardQuery)
+    card, usedFallback, err := b.resolveCardQuery(cardQuery)
+    if err != nil {
+        return err
+    }
 
-	var (
-		card         *scryfall.Card
-		err          error
-		usedFallback bool
-	)
+    return b.sendCardMessage(s, m.ChannelID, card, usedFallback, cardQuery)
+}
 
-	if hasFilters {
-		// Use search endpoint for filtered queries
-		logger.Debug("Using search endpoint for filtered query")
+// resolveCardQuery encapsulates the logic to resolve a single card query into a card,
+// applying caching, filter detection, and fallbacks consistent with single lookups.
+func (b *Bot) resolveCardQuery(cardQuery string) (*scryfall.Card, bool, error) {
+    cardQuery = strings.TrimSpace(cardQuery)
+    hasFilters := b.hasFilterParameters(cardQuery)
 
-		card, err = b.scryfallClient.SearchCardFirst(cardQuery)
+    var (
+        card         *scryfall.Card
+        err          error
+        usedFallback bool
+    )
 
-		// If filtered search fails, extract card name and try fallback
-		if err != nil {
-			cardName := b.extractCardName(cardQuery)
-			if cardName != "" && len(cardName) >= 2 {
-				logger.Debug("Filtered search failed, trying fallback with card name", "fallback_name", cardName)
+    if hasFilters {
+        card, err = b.scryfallClient.SearchCardFirst(cardQuery)
+        if err != nil {
+            // If filtered search fails, extract card name and try fallback
+            cardName := b.extractCardName(cardQuery)
+            if cardName != "" && len(cardName) >= 2 {
+                card, err = b.cache.GetOrSet(cardName, func(name string) (*scryfall.Card, error) {
+                    return b.scryfallClient.GetCardByName(name)
+                })
+                if err == nil {
+                    usedFallback = true
+                    cacheStats := b.cache.Stats()
+                    metrics.Get().UpdateCacheStats(cacheStats.Hits, cacheStats.Misses, int64(cacheStats.Size))
+                }
+            }
+        }
+    } else {
+        // Try to get from cache first for simple name lookups, then fetch from API if not found.
+        card, err = b.cache.GetOrSet(cardQuery, func(name string) (*scryfall.Card, error) {
+            return b.scryfallClient.GetCardByName(name)
+        })
+        if err == nil {
+            cacheStats := b.cache.Stats()
+            metrics.Get().UpdateCacheStats(cacheStats.Hits, cacheStats.Misses, int64(cacheStats.Size))
+        }
+    }
 
-				card, err = b.cache.GetOrSet(cardName, func(name string) (*scryfall.Card, error) {
-					return b.scryfallClient.GetCardByName(name)
-				})
-				if err == nil {
-					usedFallback = true
+    if err != nil {
+        return nil, false, errors.NewAPIError("failed to fetch card", err)
+    }
 
-					logger.Info("Fallback search successful", "original_query", cardQuery, "fallback_name", cardName)
-					// Update cache metrics for the fallback lookup
-					cacheStats := b.cache.Stats()
-					metrics.Get().UpdateCacheStats(cacheStats.Hits, cacheStats.Misses, int64(cacheStats.Size))
-				}
-			}
-		}
-	} else {
-		// Try to get from cache first for simple name lookups, then fetch from API if not found.
-		card, err = b.cache.GetOrSet(cardQuery, func(name string) (*scryfall.Card, error) {
-			return b.scryfallClient.GetCardByName(name)
-		})
-	}
+    if card == nil {
+        return nil, false, errors.NewValidationError("no card found for query")
+    }
 
-	if err != nil {
-		return errors.NewAPIError("failed to fetch card", err)
-	}
+    return card, usedFallback, nil
+}
 
-	// Update cache metrics only for cached lookups
-	if !hasFilters {
-		cacheStats := b.cache.Stats()
-		metrics.Get().UpdateCacheStats(cacheStats.Hits, cacheStats.Misses, int64(cacheStats.Size))
-	}
+// handleMultiCardLookup handles a semicolon-separated list of card queries, returning images in a grid.
+func (b *Bot) handleMultiCardLookup(s *discordgo.Session, m *discordgo.MessageCreate, rawContent string) error {
+    // Split on semicolons and trim spaces.
+    rawParts := strings.Split(rawContent, ";")
+    var queries []string
+    for _, p := range rawParts {
+        q := strings.TrimSpace(p)
+        if q != "" {
+            queries = append(queries, q)
+        }
+    }
 
-	return b.sendCardMessage(s, m.ChannelID, card, usedFallback, cardQuery)
+    if len(queries) == 0 {
+        return errors.NewValidationError("no valid card queries provided")
+    }
+
+    // If only one, fallback to normal flow.
+    if len(queries) == 1 {
+        return b.handleCardLookup(s, m, queries[0])
+    }
+
+    // Discord allows up to 10 attachments; we will group into grids of 4 for nicer layout.
+    const maxPerMessage = 4
+
+    // Resolve cards sequentially (Scryfall is rate-limited; keep it simple here).
+    var all []multiResolved
+    for _, q := range queries {
+        card, usedFallback, err := b.resolveCardQuery(q)
+        all = append(all, multiResolved{query: q, card: card, usedFallback: usedFallback, err: err})
+    }
+
+    // If all failed, return a combined error message.
+    successCount := 0
+    for _, r := range all {
+        if r.err == nil && r.card != nil && r.card.IsValidCard() {
+            successCount++
+        }
+    }
+    if successCount == 0 {
+        return errors.NewAPIError("failed to resolve any requested cards", fmt.Errorf("all lookups failed"))
+    }
+
+    // Chunk into groups and send as grids.
+    for i := 0; i < len(all); i += maxPerMessage {
+        end := i + maxPerMessage
+        if end > len(all) {
+            end = len(all)
+        }
+        chunk := all[i:end]
+        if err := b.sendCardGridMessage(s, m.ChannelID, chunk); err != nil {
+            return err
+        }
+    }
+
+    return nil
+}
+
+// sendCardGridMessage fetches images and sends them as attachments in a single message for grid layout.
+func (b *Bot) sendCardGridMessage(s *discordgo.Session, channelID string, items []multiResolved) error {
+    // Prepare HTTP client for image downloads with timeouts.
+    httpClient := &http.Client{Timeout: 20 * time.Second}
+
+    var files []*discordgo.File
+    var lines []string
+    for _, it := range items {
+        if it.err != nil || it.card == nil || !it.card.IsValidCard() {
+            lines = append(lines, fmt.Sprintf("%s: not found", it.query))
+            continue
+        }
+
+        name := it.card.GetDisplayName()
+        label := name
+        if it.usedFallback {
+            label += " (closest match)"
+        }
+        // Add a line with a link to the Scryfall page.
+        if it.card.ScryfallURI != "" {
+            lines = append(lines, fmt.Sprintf("%s: %s", label, it.card.ScryfallURI))
+        } else {
+            lines = append(lines, label)
+        }
+
+        // Fetch image if available.
+        if it.card.HasImage() {
+            url := it.card.GetBestImageURL()
+            data, filename, err := fetchImage(httpClient, url, safeFilename(name))
+            if err != nil {
+                // If image fetch fails, keep text line only.
+                continue
+            }
+            files = append(files, &discordgo.File{
+                Name:   filename,
+                Reader: bytes.NewReader(data),
+            })
+        }
+    }
+
+    if len(files) == 0 {
+        // Fallback: no images; send a combined embed with names/links.
+        content := "Requested cards:\n" + strings.Join(lines, "\n")
+        _, err := s.ChannelMessageSend(channelID, content)
+        if err != nil {
+            return errors.NewDiscordError("failed to send multi-card text message", err)
+        }
+        return nil
+    }
+
+    content := "Requested cards:\n" + strings.Join(lines, "\n")
+    _, err := s.ChannelMessageSendComplex(channelID, &discordgo.MessageSend{
+        Content: content,
+        Files:   files,
+    })
+    if err != nil {
+        return errors.NewDiscordError("failed to send multi-card grid message", err)
+    }
+    return nil
+}
+
+// fetchImage downloads the image data, returning bytes and a reasonable filename.
+func fetchImage(client *http.Client, url string, base string) ([]byte, string, error) {
+    // Context with timeout per request.
+    ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+    defer cancel()
+
+    req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+    if err != nil {
+        return nil, "", err
+    }
+    req.Header.Set("User-Agent", "MTGCardBot-ImageFetcher/1.0")
+
+    resp, err := client.Do(req)
+    if err != nil {
+        return nil, "", err
+    }
+    defer func() { _ = resp.Body.Close() }()
+    if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+        return nil, "", fmt.Errorf("unexpected status: %d", resp.StatusCode)
+    }
+    data, err := io.ReadAll(resp.Body)
+    if err != nil {
+        return nil, "", err
+    }
+
+    // Determine extension from Content-Type or URL.
+    ext := ".jpg"
+    ct := resp.Header.Get("Content-Type")
+    switch {
+    case strings.Contains(ct, "png"):
+        ext = ".png"
+    case strings.Contains(ct, "jpeg"), strings.Contains(ct, "jpg"):
+        ext = ".jpg"
+    default:
+        // try URL hint
+        if strings.HasSuffix(strings.ToLower(url), ".png") {
+            ext = ".png"
+        } else if strings.HasSuffix(strings.ToLower(url), ".jpg") || strings.HasSuffix(strings.ToLower(url), ".jpeg") {
+            ext = ".jpg"
+        }
+    }
+
+    filename := base + ext
+    // Ensure extension is clean.
+    filename = filepath.Base(filename)
+    return data, filename, nil
+}
+
+var filenameSanitizer = regexp.MustCompile(`[^a-zA-Z0-9._-]+`)
+
+func safeFilename(name string) string {
+    lower := strings.ToLower(name)
+    replaced := filenameSanitizer.ReplaceAllString(lower, "-")
+    replaced = strings.Trim(replaced, "-._")
+    if replaced == "" {
+        return "card"
+    }
+    if len(replaced) > 64 {
+        return replaced[:64]
+    }
+    return replaced
 }
 
 // hasFilterParameters checks if the query contains essential Scryfall filter syntax.
@@ -439,23 +656,23 @@ func (b *Bot) handleHelp(s *discordgo.Session, m *discordgo.MessageCreate, _ []s
 	)
 	logger.Info("Showing help information")
 
-	embed := &discordgo.MessageEmbed{
-		Title:       "MTG Card Bot Help",
-		Description: "Magic: The Gathering card lookup with advanced filtering support",
-		Color:       0x3498DB,
-		Fields: []*discordgo.MessageEmbedField{
-			{
-				Name: "Basic Commands",
-				Value: fmt.Sprintf("`%s<card-name>` - Look up any MTG card\n`%srandom` - Get a random card\n`%shelp` - Show this help menu\n`%sstats` - Display bot statistics\n`%scache` - Show cache performance",
-					b.config.CommandPrefix, b.config.CommandPrefix, b.config.CommandPrefix, b.config.CommandPrefix, b.config.CommandPrefix),
-				Inline: false,
-			},
-			{
-				Name: "Search Examples",
-				Value: fmt.Sprintf("`%slightning bolt` - Find Lightning Bolt\n`%sthe one ring` - Find The One Ring\n`%sjac bele` - Fuzzy search finds \"Jace Beleren\"\n`%sbol` - Partial name finds \"Lightning Bolt\"",
-					b.config.CommandPrefix, b.config.CommandPrefix, b.config.CommandPrefix, b.config.CommandPrefix),
-				Inline: false,
-			},
+    embed := &discordgo.MessageEmbed{
+        Title:       "MTG Card Bot Help",
+        Description: "Magic: The Gathering card lookup with advanced filtering support",
+        Color:       0x3498DB,
+        Fields: []*discordgo.MessageEmbedField{
+            {
+                Name: "Basic Commands",
+                Value: fmt.Sprintf("`%s<card-name>` - Look up any MTG card\n`%s<card1>; <card2>; ...` - Lookup multiple cards in a grid (up to 10)\n`%srandom` - Get a random card\n`%shelp` - Show this help menu\n`%sstats` - Display bot statistics\n`%scache` - Show cache performance",
+                    b.config.CommandPrefix, b.config.CommandPrefix, b.config.CommandPrefix, b.config.CommandPrefix, b.config.CommandPrefix, b.config.CommandPrefix),
+                Inline: false,
+            },
+            {
+                Name: "Search Examples",
+                Value: fmt.Sprintf("`%slightning bolt` - Find Lightning Bolt\n`%sthe one ring` - Find The One Ring\n`%sjac bele` - Fuzzy search finds \"Jace Beleren\"\n`%sbol` - Partial name finds \"Lightning Bolt\"\n`%sblack lotus; lightning bolt; the one ring` - 3-card grid",
+                    b.config.CommandPrefix, b.config.CommandPrefix, b.config.CommandPrefix, b.config.CommandPrefix, b.config.CommandPrefix),
+                Inline: false,
+            },
 			{
 				Name: "Advanced Filtering",
 				Value: fmt.Sprintf("`%sthe one ring e:ltr border:borderless` - Specific version\n`%slightning bolt frame:1993` - Original 1993 frame\n`%sblack lotus is:foil` - Foil version only\n`%smox ruby rarity:rare e:vma` - Rare from Vintage Masters",
