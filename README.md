@@ -1,238 +1,248 @@
+# MTG Card Bot
+
 <p align="center">
-  <img src="https://github.com/dunamismax/images/blob/main/golang/discord-bots/mtg.png" alt="MTG" width="300" />
+  <img src="https://github.com/dunamismax/images/blob/main/golang/discord-bots/mtg.png" alt="MTG Card Bot" width="400" />
 </p>
 
 <p align="center">
-  <a href="https://github.com/dunamismax/MTG-Card-Bot">
-    <img src="https://readme-typing-svg.demolab.com/?font=Fira+Code&size=24&pause=1000&color=00ADD8&center=true&vCenter=true&width=900&lines=Magic+The+Gathering+Card+Lookup+Bot;Discord+Bot+in+Go;Advanced+Card+Filtering+with+Smart+Fallback;Scryfall+API+Integration+with+Rate+Limiting;Rich+Discord+Embeds+with+Card+Images;Fuzzy+Search+and+Random+Card+Features;Auto-Restart+Development+with+Mage;Environment+Configuration+Management;Single+Binary+Deployments" alt="Typing SVG" />
-  </a>
+  <img src="https://readme-typing-svg.demolab.com/?font=Fira+Code&size=22&pause=1000&color=5865F2&center=true&vCenter=true&width=900&lines=Advanced+Magic+Card+Lookup+with+Live+Pricing;Smart+Fuzzy+Search+and+Advanced+Filtering;Real-Time+Market+Data+and+Format+Legality;Multi-Card+Grid+Display+with+Rich+Embeds;Scryfall+API+Integration+with+Rate+Limiting;Official+Rulings+and+Card+Image+Display;No+Caching+-+Always+Fresh+Card+Data;Rate+Limited+Anti-Spam+Protection;Modern+Python+3.12+Architecture;Built+with+discord.py+and+uv+Package+Manager" alt="Typing SVG" />
 </p>
 
 <p align="center">
-  <a href="https://golang.org/"><img src="https://img.shields.io/badge/Go-1.24+-00ADD8.svg?logo=go" alt="Go Version"></a>
-  <a href="https://github.com/bwmarrin/discordgo"><img src="https://img.shields.io/badge/Discord-DiscordGo-5865F2.svg?logo=discord&logoColor=white" alt="DiscordGo"></a>
+  <a href="https://python.org/"><img src="https://img.shields.io/badge/Python-3.12+-3776AB.svg?logo=python&logoColor=white" alt="Python Version"></a>
+  <a href="https://github.com/Rapptz/discord.py"><img src="https://img.shields.io/badge/Discord-discord.py-5865F2.svg?logo=discord&logoColor=white" alt="discord.py"></a>
   <a href="https://scryfall.com/docs/api"><img src="https://img.shields.io/badge/API-Scryfall-FF6B35.svg" alt="Scryfall API"></a>
-  <a href="https://magefile.org/"><img src="https://img.shields.io/badge/Build-Mage-purple.svg?logo=go" alt="Mage"></a>
-  <a href="https://pkg.go.dev/log/slog"><img src="https://img.shields.io/badge/Logging-slog-00ADD8.svg?logo=go" alt="Go slog"></a>
-  <a href="https://github.com/spf13/viper"><img src="https://img.shields.io/badge/Config-Environment-00ADD8.svg?logo=go" alt="Environment Config"></a>
+  <a href="https://docs.astral.sh/uv/"><img src="https://img.shields.io/badge/Package%20Manager-uv-DE5FE9.svg" alt="uv"></a>
+  <a href="https://github.com/structlog/structlog"><img src="https://img.shields.io/badge/Logging-structlog-blue.svg" alt="structlog"></a>
   <a href="https://opensource.org/licenses/Apache-2.0"><img src="https://img.shields.io/badge/License-Apache%202.0-green.svg" alt="Apache 2.0 License"></a>
 </p>
 
----
-
-## About
-
-A dedicated Magic: The Gathering card lookup Discord bot built in Go. Features fuzzy search, advanced filtering, random card discovery, and rich embeds powered by the Scryfall API.
-
-**Highlights:**
-
-* **Fuzzy Card Search** – Find cards with partial names like "jac bele" → "Jace Beleren"
-* **Advanced Filtering** – Find specific versions with `frame:`, `border:`, `is:foil`, `e:set`, and more
-* **Smart Fallback** – When filtered searches fail, automatically retry with just the card name
-* **Random Card Discovery** – Get random MTG cards with the `!random` command
-* **Rich Embeds** – Card images, rarity colors, mana costs, and detailed info
-* **Respectful API Use** – Built-in Scryfall rate limiting (10 requests/sec)
-* **Development Tools** – Auto-restart, build scripts, quality checks with Mage
-* **Easy Configuration** – Environment variables, `.env` support, and validation
-* **Simple Deployment** – Single-binary builds with structured logging
-
----
+A dedicated Magic: The Gathering card lookup Discord bot built in modern Python. Features fuzzy search, advanced filtering, random card discovery, and rich embeds powered by the Scryfall API with real-time pricing and format legality information.
 
 ## Quick Start
 
+### Prerequisites
+
+- **[uv](https://docs.astral.sh/uv/)** - Fast Python package manager
+- **Discord Bot Token** - From [Discord Developer Portal](https://discord.com/developers/applications)
+
+### Installation
+
 ```bash
-git clone https://github.com/dunamismax/MTG-Card-Bot.git
-cd MTG-Card-Bot
-go mod tidy
-go install github.com/magefile/mage@latest
-cp .env.example .env  # Add your Discord bot token
-mage setup
-mage dev
+# 1. Install uv and Python 3.12
+curl -LsSf https://astral.sh/uv/install.sh | sh
+uv python install 3.12
+
+# 2. Clone and setup
+git clone https://github.com/dunamismax/mtg-card-bot.git
+cd mtg-card-bot
+
+# 3. Configure environment
+cp .env.example .env
+# Edit .env with your Discord bot token
+
+# 4. Install dependencies and run
+uv sync
+uv run mtg-card-bot
 ```
 
-**Requirements:** Go 1.24+, Discord Bot Token
-
----
-
-## Mage Commands
+### Environment Configuration
 
 ```bash
-mage setup         # Install dev tools
-mage dev           # Run bot with auto-restart
-mage build         # Build binary
-mage fmt / lint    # Format & lint checks
-mage vulncheck     # Security check
+# Required Discord token
+MTG_DISCORD_TOKEN=your_discord_bot_token_here
+
+# Optional settings
+MTG_COMMAND_PREFIX=!               # Command prefix (default: !)
+MTG_LOG_LEVEL=INFO                 # Log level: DEBUG, INFO, WARNING, ERROR
+MTG_JSON_LOGGING=false             # Use JSON structured logging
 ```
 
----
+## Bot Features
 
-<p align="center">
-  <img src="https://github.com/dunamismax/images/blob/main/golang/discord-bots/mtg-card-bot-gopher.png" alt="mtg-card-bot-gopher" width="300" />
-</p>
+### Advanced Card Lookup
 
-## Bot Commands
-
-### Basic Commands
+Comprehensive Magic: The Gathering card search with **live pricing**, format legality, and official rulings. **No caching** - always fresh data from Scryfall.
 
 ```bash
-# Card lookup with fuzzy matching
-!lightning bolt        # Finds "Lightning Bolt"
-!the one ring         # Finds "The One Ring"
-!jac bele             # Finds "Jace Beleren" (fuzzy search)
+# Basic card lookup with pricing and legality
+!lightning bolt                    
+!the one ring                     
+!jac bele                         # Fuzzy search: finds "Jace Beleren"
+[[Lightning Bolt]]                # Alternative bracket syntax
 
-# Random card discovery
-!random               # Get a random Magic: The Gathering card
+# Official card rulings
+!rules counterspell               # Get official rulings and errata
+!rules lightning bolt             
 
-# Bot information and statistics
-!help                 # Show available commands and filtering examples
-!stats                # Display bot performance metrics
-!cache                # Show detailed cache statistics
-```
+# Random card discovery  
+!random                           # Get any random Magic card
+!random rarity:mythic             # Random mythic rare card
+!random e:mh3                     # Random card from Modern Horizons 3
+!random rarity:rare e:who         # Random rare from Doctor Who set
 
-### Multi-Card Lookup (Grid)
+# Multi-card grid display
+!black lotus; sol ring; time walk # Multiple cards in one command
+!sol ring e:lea; mox ruby e:lea   # Filtered multi-card lookup
 
-```bash
-# Look up multiple cards at once (semicolon-separated)
-!black lotus; lightning bolt; the one ring; sol ring
-
-# Up to 10 per request; sent in grids of 4
-
-# Showcase example (copy/paste)
-!black lotus frame:1993; the one ring e:ltr is:foil border:borderless; sol ring is:textless; lightning bolt is:fullart
+# Command aliases
+!r, !rand, !h, !help, !?          # Shorter command variants
 ```
 
 ### Advanced Filtering
 
-```bash
-# Frame styles
-!lightning bolt frame:1993         # Original 1993 frame
-!sol ring frame:2015              # Modern 2015 frame
-!akroma frame:future              # Future sight frame
-
-# Border types
-!the one ring border:borderless   # Borderless version
-!lightning bolt border:white      # White border version
-
-# Finishes and treatments
-!brainstorm is:foil               # Foil version
-!sol ring is:nonfoil              # Non-foil version
-!lightning bolt is:etched         # Etched finish
-
-# Set and edition filtering
-!black lotus e:lea                # From Limited Edition Alpha
-!ancestral recall e:leb           # From Limited Edition Beta
-!lightning bolt e:sta is:fullart  # Full-art from Strixhaven Archives
-
-# Combine multiple filters
-!force of will frame:1997 is:foil e:all     # 1997 frame, foil, from Alliances
-!jace the mind sculptor frame:2015 e:a25    # Modern frame from Masters 25
-```
-
-### Complete Reference
-
-**[Full Command Cheat Sheet](docs/commands.md)** – Comprehensive guide with all filtering options, examples, and troubleshooting tips.
-
-Additional docs:
-
-* [Old-School Art Guide](docs/old-school-art.md) – Frames, borders, and vintage aesthetics for iconic looks.
-
-### Examples of fuzzy matching
+Support for all Scryfall filter syntax with smart fallback when filtered searches fail:
 
 ```bash
-!counterspell         # Exact match
-!counter              # Finds "Counterspell"
-!force will           # Finds "Force of Will"
-!ancestral            # Finds "Ancestral Recall"
+# Set filtering
+!lightning bolt e:mh3             # From Modern Horizons 3
+!sol ring e:lea                   # From Limited Edition Alpha
+!brainstorm e:ice                 # From Ice Age
+
+# Rarity and treatment filtering
+!brainstorm is:foil               # Foil version only
+!sol ring is:showcase             # Showcase treatment
+!lightning bolt frame:borderless   # Borderless frame style
+!force of will rarity:mythic      # Mythic rare versions only
+
+# Advanced combinations
+!force of will e:all is:foil frame:1997    # Specific set, foil, old frame
+!lightning bolt is:fullart e:sta           # Full-art from Strixhaven Archives
+!the one ring border:borderless e:ltr      # Borderless from Lord of the Rings
 ```
 
-## Bot in Action
+## Bot Commands Reference
 
-<p align="center">
-  <img src="https://github.com/dunamismax/images/blob/main/golang/discord-bots/the-one-ring-screenshot.png" alt="The One Ring" width="500" />
-  <br>
-  <em>Custom filtered search in action - "!the one ring border:borderless e:ltr" finds "The One Ring (Borderless Poster)"</em>
-</p>
+### Basic Commands
+- `!<card name>` - Look up any Magic card by name
+- `!rules <card name>` - Get official rulings for a card
+- `!random` - Get a random Magic card
+- `!random <filters>` - Get a filtered random card
+- `!help` - Show command help and examples
 
-<p align="center">
-  <img src="https://github.com/dunamismax/images/blob/main/golang/discord-bots/black-lotus-fuzzy-search.png" alt="Fuzzy Search" width="500" />
-  <br>
-  <em>Fuzzy search in action - "!black lo" finds "Black Lotus"</em>
-</p>
+### Multi-Card Lookup
+- `!card1; card2; card3` - Look up multiple cards (semicolon-separated)
+- `!card1 filter; card2 filter` - Multi-card lookup with individual filters
 
-<p align="center">
-  <img src="https://github.com/dunamismax/images/blob/main/golang/discord-bots/multi-card-grid.png" alt="Multi-Card Grid" width="500" />
-  <br>
-  <em>Multi-card grid response with clickable card links above the images</em>
-</p>
+### Filter Examples
+- **Sets**: `e:mh3`, `e:ltr`, `e:who`, `e:lea`
+- **Rarity**: `rarity:mythic`, `rarity:rare`, `rarity:uncommon`
+- **Treatments**: `is:foil`, `is:showcase`, `frame:borderless`, `is:fullart`
+- **Colors**: `c:red`, `c:blue`, `c:wubrg`
 
-<p align="center">
-  <img src="https://github.com/dunamismax/images/blob/main/golang/discord-bots/stats-new.png" alt="Stats Command Screenshot" width="500" />
-  <br>
-  <em>Performance statistics and monitoring</em>
-</p>
+## Architecture
 
-<p align="center">
-  <img src="https://github.com/dunamismax/images/blob/main/golang/discord-bots/help-new.png" alt="Help Command Screenshot" width="500" />
-  <br>
-  <em>Help command showing all available features</em>
-</p>
-
----
+```sh
+mtg-card-bot/
+├── mtg_card_bot/           # Main bot package
+│   ├── __init__.py
+│   ├── __main__.py         # Entry point with main() function
+│   ├── bot.py              # Core Discord bot logic
+│   ├── config.py           # Configuration management
+│   ├── errors.py           # Custom error types
+│   ├── logging.py          # Structured logging setup
+│   └── scryfall.py         # Scryfall API client
+├── pyproject.toml          # Project configuration & dependencies
+├── .env.example            # Environment template
+└── README.md               # Documentation
+```
 
 ## Development
 
-The bot uses a clean architecture with organized packages:
+```bash
+# Install dependencies
+uv sync
 
-* `main.go` - Application entry point
-* `discord/` - Discord client and bot logic
-* `scryfall/` - Scryfall API integration
-* `cache/` - Card caching system
-* `metrics/` - Performance monitoring
-* `logging/` - Structured logging
-* `errors/` - Custom error types
-* `config/` - Configuration management
+# Run the bot
+uv run python -m mtg_card_bot
+# Or use the console script
+uv run mtg-card-bot
 
-Start development with `mage dev` for auto-restart functionality.
+# Development tools
+uv run ruff format .              # Code formatting
+uv run ruff check .               # Linting  
+uv run mypy mtg_card_bot/         # Type checking
+uv run pytest                     # Run tests (when available)
+```
 
----
+## Key Features
 
-<p align="center">
-  <img src="https://github.com/dunamismax/images/blob/main/golang/go-logo.png" alt="MTG Card Bot Logo" width="300" />
-</p>
+- **Smart Fuzzy Search** - Find cards with partial names and typos
+- **Advanced Filtering** - Full Scryfall filter syntax support with fallback
+- **Live Data Integration** - Real-time pricing from TCGPlayer and market data
+- **Rich Discord Embeds** - High-quality card images with rarity-based colors
+- **Multi-Card Display** - Grid layout for multiple card lookups
+- **Official Rulings** - Access to comprehensive card rulings and errata
+- **Rate Limiting** - Built-in API respect and anti-spam protection
+- **Modern Python** - Type hints, async/await, structured logging
+- **Zero Caching** - Always fresh card data and pricing information
+- **Bracket Syntax** - Support for `[[card name]]` Magic community standard
 
-## Deployment Options
+## Bot in Action
 
-* **Single Binary** – Build with `mage build`, copy the file, and run with env vars.
-* **Systemd** – Create a service to keep it running on Linux.
-* **Docker** – Lightweight container build included.
+The bot provides rich Discord embeds featuring:
+- High-quality card images from Scryfall
+- Rarity-based color coding for visual distinction
+- Live pricing information from multiple markets
+- Format legality across all major Magic formats
+- Set information with artist credits
+- Clickable Scryfall links for additional details
+- Mana cost display with converted mana cost
+- Multi-card grid layouts for batch lookups
 
-For step-by-step setup, see the [Discord Setup Guide](docs/discord-setup-guide.md).
+## Deployment
 
----
+### Local Deployment
+```bash
+# Install and run
+uv sync
+uv run mtg-card-bot
+```
 
-<p align="center">
-  <a href="https://buymeacoffee.com/dunamismax" target="_blank">
-    <img src="https://github.com/dunamismax/images/blob/main/golang/buy-coffee-go.gif" alt="Buy Me A Coffee" style="height: 150px !important;" />
-  </a>
-</p>
+### Systemd Service
+Create `/etc/systemd/system/mtg-card-bot.service`:
+```ini
+[Unit]
+Description=MTG Card Bot
+After=network.target
 
-<p align="center">
-  <a href="https://twitter.com/dunamismax" target="_blank"><img src="https://img.shields.io/badge/Twitter-%231DA1F2.svg?&style=for-the-badge&logo=twitter&logoColor=white" alt="Twitter"></a>
-  <a href="https://bsky.app/profile/dunamismax.bsky.social" target="_blank"><img src="https://img.shields.io/badge/Bluesky-blue?style=for-the-badge&logo=bluesky&logoColor=white" alt="Bluesky"></a>
-  <a href="https://reddit.com/user/dunamismax" target="_blank"><img src="https://img.shields.io/badge/Reddit-%23FF4500.svg?&style=for-the-badge&logo=reddit&logoColor=white" alt="Reddit"></a>
-  <a href="https://discord.com/users/dunamismax" target="_blank"><img src="https://img.shields.io/badge/Discord-dunamismax-7289DA.svg?style=for-the-badge&logo=discord&logoColor=white" alt="Discord"></a>
-  <a href="https://signal.me/#p/+dunamismax.66" target="_blank"><img src="https://img.shields.io/badge/Signal-dunamismax.66-3A76F0.svg?style=for-the-badge&logo=signal&logoColor=white" alt="Signal"></a>
-</p>
+[Service]
+Type=simple
+User=your-user
+WorkingDirectory=/path/to/mtg-card-bot
+Environment=MTG_DISCORD_TOKEN=your_token_here
+ExecStart=/path/to/uv run mtg-card-bot
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+```
+
+### Docker Deployment
+```dockerfile
+FROM python:3.12-slim
+WORKDIR /app
+COPY . .
+RUN pip install uv && uv sync --frozen
+CMD ["uv", "run", "mtg-card-bot"]
+```
+
+## API Usage
+
+The bot respects Scryfall's API guidelines with:
+- Built-in rate limiting (max 10 requests/second)
+- Proper error handling and retries
+- User-agent identification for API tracking
+- Duplicate request suppression
+- Graceful fallback for failed filtered searches
 
 ## License
 
-Apache 2.0 – see [LICENSE](LICENSE) for details.
+Apache 2.0 - see [LICENSE](LICENSE) for details.
 
 ---
 
 <p align="center">
-  <strong>MTG Card Discord Bot</strong><br>
-  <sub>DiscordGo • Scryfall API • Advanced Filtering • Smart Fallback • Mage • slog • Rich Embeds</sub>
+  <strong>Magic: The Gathering Discord Bot</strong><br>
+  <sub>Built with Python 3.12+ • discord.py • Scryfall API • uv • Modern Architecture</sub>
 </p>
-
----
