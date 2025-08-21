@@ -5,11 +5,11 @@
 </p>
 
 <p align="center">
-  <img src="https://readme-typing-svg.demolab.com/?font=Fira+Code&size=22&pause=1000&color=5865F2&center=true&vCenter=true&width=900&lines=Advanced+Magic+Card+Lookup+with+Live+Pricing;Smart+Fuzzy+Search+and+Advanced+Filtering;Real-Time+Market+Data+and+Format+Legality;Multi-Card+Grid+Display+with+Rich+Embeds;Scryfall+API+Integration+with+Rate+Limiting;Official+Rulings+and+Card+Image+Display;No+Caching+-+Always+Fresh+Card+Data;Rate+Limited+Anti-Spam+Protection;Modern+Python+3.12+Architecture;Built+with+discord.py+and+uv+Package+Manager" alt="Typing SVG" />
+  <img src="https://readme-typing-svg.demolab.com/?font=Fira+Code&size=22&pause=1000&color=5865F2&center=true&vCenter=true&width=900&lines=Advanced+Magic+Card+Lookup+with+Live+Pricing;Smart+Fuzzy+Search+and+Advanced+Filtering;Real-Time+Market+Data+and+Format+Legality;Multi-Card+Grid+Display+with+Rich+Embeds;Scryfall+API+Integration+with+Rate+Limiting;Official+Rulings+and+Card+Image+Display;No+Caching+-+Always+Fresh+Card+Data;Rate+Limited+Anti-Spam+Protection;Modern+Python+3.13+Architecture;Built+with+discord.py+and+uv+Package+Manager" alt="Typing SVG" />
 </p>
 
 <p align="center">
-  <a href="https://python.org/"><img src="https://img.shields.io/badge/Python-3.12+-3776AB.svg?logo=python&logoColor=white" alt="Python Version"></a>
+  <a href="https://python.org/"><img src="https://img.shields.io/badge/Python-3.13+-3776AB.svg?logo=python&logoColor=white" alt="Python Version"></a>
   <a href="https://github.com/Rapptz/discord.py"><img src="https://img.shields.io/badge/Discord-discord.py-5865F2.svg?logo=discord&logoColor=white" alt="discord.py"></a>
   <a href="https://scryfall.com/docs/api"><img src="https://img.shields.io/badge/API-Scryfall-FF6B35.svg" alt="Scryfall API"></a>
   <a href="https://docs.astral.sh/uv/"><img src="https://img.shields.io/badge/Package%20Manager-uv-DE5FE9.svg" alt="uv"></a>
@@ -29,21 +29,29 @@ A dedicated Magic: The Gathering card lookup Discord bot built in modern Python.
 ### Installation
 
 ```bash
-# 1. Install uv and Python 3.12
+# 1. Install uv (Python package manager)
 curl -LsSf https://astral.sh/uv/install.sh | sh
-uv python install 3.12
+source ~/.bashrc  # or restart your terminal
 
-# 2. Clone and setup
+# 2. Install Python 3.13 and set as global
+uv python install 3.13
+uv python pin 3.13
+
+# 3. Clone and setup project
 git clone https://github.com/dunamismax/mtg-card-bot.git
 cd mtg-card-bot
 
-# 3. Configure environment
+# 4. Configure environment
 cp .env.example .env
 # Edit .env with your Discord bot token
 
-# 4. Install dependencies and run
+# 5. Install dependencies
 uv sync
-uv run mtg-card-bot
+
+# 6. Run the bot (choose one method)
+uv run python manage_bot.py start    # Using bot manager (recommended)
+# OR
+uv run python manage_bot.py          # Interactive management mode
 ```
 
 ### Environment Configuration
@@ -57,6 +65,30 @@ MTG_COMMAND_PREFIX=!               # Command prefix (default: !)
 MTG_LOG_LEVEL=INFO                 # Log level: DEBUG, INFO, WARNING, ERROR
 MTG_JSON_LOGGING=false             # Use JSON structured logging
 ```
+
+### Bot Management
+
+The `manage_bot.py` script provides comprehensive bot management with both interactive and command-line modes:
+
+```bash
+# Interactive management mode (recommended for beginners)
+uv run python manage_bot.py
+
+# Direct commands
+uv run python manage_bot.py start     # Start the bot with live logs
+uv run python manage_bot.py stop      # Stop the bot gracefully
+uv run python manage_bot.py restart   # Restart the bot
+uv run python manage_bot.py status    # Check bot status
+uv run python manage_bot.py kill      # Force kill all bot processes
+uv run python manage_bot.py logs      # Monitor running bot logs
+```
+
+**Interactive Mode Features:**
+- Menu-driven interface with numbered options
+- Real-time process monitoring and status checking
+- Graceful shutdown with fallback to force termination
+- Environment variable validation
+- Live log streaming during bot operation
 
 ## Bot Features
 
@@ -142,6 +174,7 @@ mtg-card-bot/
 │   ├── errors.py           # Custom error types
 │   ├── logging.py          # Structured logging setup
 │   └── scryfall.py         # Scryfall API client
+├── manage_bot.py           # Unified bot management script
 ├── pyproject.toml          # Project configuration & dependencies
 ├── .env.example            # Environment template
 └── README.md               # Documentation
@@ -153,16 +186,23 @@ mtg-card-bot/
 # Install dependencies
 uv sync
 
-# Run the bot
-uv run python -m mtg_card_bot
-# Or use the console script
-uv run mtg-card-bot
+# Run the bot (recommended methods)
+uv run python manage_bot.py start       # Using management script
+uv run python manage_bot.py             # Interactive mode
+
+# Alternative direct execution
+uv run python -m mtg_card_bot           # Direct module execution
 
 # Development tools
-uv run ruff format .              # Code formatting
-uv run ruff check .               # Linting  
-uv run mypy mtg_card_bot/         # Type checking
-uv run pytest                     # Run tests (when available)
+uv run ruff format .                     # Code formatting
+uv run ruff check .                      # Linting  
+uv run mypy mtg_card_bot/                # Type checking
+uv run pytest                            # Run tests (when available)
+
+# Bot management during development
+uv run python manage_bot.py status      # Check bot status
+uv run python manage_bot.py restart     # Quick restart during development
+uv run python manage_bot.py logs        # Monitor logs
 ```
 
 ## Key Features
@@ -196,7 +236,7 @@ The bot provides rich Discord embeds featuring:
 ```bash
 # Install and run
 uv sync
-uv run mtg-card-bot
+uv run python manage_bot.py start
 ```
 
 ### Systemd Service
@@ -211,20 +251,47 @@ Type=simple
 User=your-user
 WorkingDirectory=/path/to/mtg-card-bot
 Environment=MTG_DISCORD_TOKEN=your_token_here
-ExecStart=/path/to/uv run mtg-card-bot
+ExecStart=/home/your-user/.local/bin/uv run python manage_bot.py start
 Restart=always
+RestartSec=5
 
 [Install]
 WantedBy=multi-user.target
 ```
 
+**Systemd Management:**
+```bash
+# Enable and start service
+sudo systemctl enable mtg-card-bot
+sudo systemctl start mtg-card-bot
+
+# Check status and logs
+sudo systemctl status mtg-card-bot
+sudo journalctl -u mtg-card-bot -f
+```
+
 ### Docker Deployment
 ```dockerfile
-FROM python:3.12-slim
+FROM python:3.13-slim
 WORKDIR /app
 COPY . .
 RUN pip install uv && uv sync --frozen
-CMD ["uv", "run", "mtg-card-bot"]
+CMD ["uv", "run", "python", "manage_bot.py", "start"]
+```
+
+**Docker Commands:**
+```bash
+# Build and run
+docker build -t mtg-card-bot .
+docker run -e MTG_DISCORD_TOKEN=your_token_here mtg-card-bot
+
+# Docker Compose (create docker-compose.yml)
+services:
+  mtg-card-bot:
+    build: .
+    environment:
+      - MTG_DISCORD_TOKEN=your_token_here
+    restart: unless-stopped
 ```
 
 ## API Usage
@@ -244,5 +311,5 @@ Apache 2.0 - see [LICENSE](LICENSE) for details.
 
 <p align="center">
   <strong>Magic: The Gathering Discord Bot</strong><br>
-  <sub>Built with Python 3.12+ • discord.py • Scryfall API • uv • Modern Architecture</sub>
+  <sub>Built with Python 3.13+ • discord.py • Scryfall API • uv • Modern Architecture</sub>
 </p>
