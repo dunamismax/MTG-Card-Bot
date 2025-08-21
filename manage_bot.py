@@ -56,16 +56,14 @@ class MTGBotManager:
             processes = []
 
             for line in result.stdout.split("\n"):
+                # Only look for actual bot processes, not the management script
                 if (
-                    any(
-                        pattern in line.lower()
-                        for pattern in [
-                            "mtg_card_bot",
-                            "mtg-card-bot",
-                            "python.*mtg",
-                            "uv.*mtg",
-                        ]
+                    (
+                        "python -m mtg_card_bot" in line
+                        or "python3 -m mtg_card_bot" in line
+                        or line.endswith("mtg-card-bot")  # Console script
                     )
+                    and "manage_bot.py" not in line  # Exclude management script
                     and "grep" not in line
                     and "ps aux" not in line
                 ):
@@ -132,16 +130,16 @@ class MTGBotManager:
                 except Exception as e:
                     print(f"   ⚠️  Error force killing PID {pid}: {e}")
 
-        # Step 4: Additional cleanup using pkill
+        # Step 4: Additional cleanup using pkill (more targeted)
         try:
             subprocess.run(
-                ["pkill", "-f", "mtg.*bot"], check=False, stderr=subprocess.DEVNULL
+                ["pkill", "-f", "python -m mtg_card_bot"], check=False, stderr=subprocess.DEVNULL
             )
             subprocess.run(
-                ["pkill", "-f", "python.*mtg"], check=False, stderr=subprocess.DEVNULL
+                ["pkill", "-f", "python3 -m mtg_card_bot"], check=False, stderr=subprocess.DEVNULL
             )
             subprocess.run(
-                ["pkill", "-f", "uv.*mtg"], check=False, stderr=subprocess.DEVNULL
+                ["pkill", "-f", "uv run.*mtg-card-bot$"], check=False, stderr=subprocess.DEVNULL
             )
         except Exception:
             pass  # pkill might not be available
