@@ -84,6 +84,7 @@ uv run python manage_bot.py logs      # Monitor running bot logs
 ```
 
 **Interactive Mode Features:**
+
 - Menu-driven interface with numbered options
 - Real-time process monitoring and status checking
 - Graceful shutdown with fallback to force termination
@@ -98,16 +99,16 @@ Comprehensive Magic: The Gathering card search with **live pricing**, format leg
 
 ```bash
 # Basic card lookup with pricing and legality
-!lightning bolt                    
-!the one ring                     
+!lightning bolt
+!the one ring
 !jac bele                         # Fuzzy search: finds "Jace Beleren"
 [[Lightning Bolt]]                # Alternative bracket syntax
 
 # Official card rulings
 !rules counterspell               # Get official rulings and errata
-!rules lightning bolt             
+!rules lightning bolt
 
-# Random card discovery  
+# Random card discovery
 !random                           # Get any random Magic card
 !random rarity:mythic             # Random mythic rare card
 !random e:mh3                     # Random card from Modern Horizons 3
@@ -146,6 +147,7 @@ Support for all Scryfall filter syntax with smart fallback when filtered searche
 ## Bot Commands Reference
 
 ### Basic Commands
+
 - `!<card name>` - Look up any Magic card by name
 - `!rules <card name>` - Get official rulings for a card
 - `!random` - Get a random Magic card
@@ -153,10 +155,12 @@ Support for all Scryfall filter syntax with smart fallback when filtered searche
 - `!help` - Show command help and examples
 
 ### Multi-Card Lookup
+
 - `!card1; card2; card3` - Look up multiple cards (semicolon-separated)
 - `!card1 filter; card2 filter` - Multi-card lookup with individual filters
 
 ### Filter Examples
+
 - **Sets**: `e:mh3`, `e:ltr`, `e:who`, `e:lea`
 - **Rarity**: `rarity:mythic`, `rarity:rare`, `rarity:uncommon`
 - **Treatments**: `is:foil`, `is:showcase`, `frame:borderless`, `is:fullart`
@@ -195,7 +199,7 @@ uv run python -m mtg_card_bot           # Direct module execution
 
 # Development tools
 uv run ruff format .                     # Code formatting
-uv run ruff check .                      # Linting  
+uv run ruff check .                      # Linting
 uv run mypy mtg_card_bot/                # Type checking
 uv run pytest                            # Run tests (when available)
 
@@ -221,6 +225,7 @@ uv run python manage_bot.py logs        # Monitor logs
 ## Bot in Action
 
 The bot provides rich Discord embeds featuring:
+
 - High-quality card images from Scryfall
 - Rarity-based color coding for visual distinction
 - Live pricing information from multiple markets
@@ -233,6 +238,7 @@ The bot provides rich Discord embeds featuring:
 ## Deployment
 
 ### Local Deployment
+
 ```bash
 # Install and run
 uv sync
@@ -240,7 +246,9 @@ uv run python manage_bot.py start
 ```
 
 ### Systemd Service
+
 Create `/etc/systemd/system/mtg-card-bot.service`:
+
 ```ini
 [Unit]
 Description=MTG Card Bot
@@ -260,6 +268,7 @@ WantedBy=multi-user.target
 ```
 
 **Systemd Management:**
+
 ```bash
 # Enable and start service
 sudo systemctl enable mtg-card-bot
@@ -271,6 +280,7 @@ sudo journalctl -u mtg-card-bot -f
 ```
 
 ### Docker Deployment
+
 ```dockerfile
 FROM python:3.13-slim
 WORKDIR /app
@@ -280,6 +290,7 @@ CMD ["uv", "run", "python", "manage_bot.py", "start"]
 ```
 
 **Docker Commands:**
+
 ```bash
 # Build and run
 docker build -t mtg-card-bot .
@@ -297,6 +308,7 @@ services:
 ## API Usage
 
 The bot respects Scryfall's API guidelines with:
+
 - Built-in rate limiting (max 10 requests/second)
 - Proper error handling and retries
 - User-agent identification for API tracking
